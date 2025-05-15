@@ -1,8 +1,10 @@
 import { createRoot } from "react-dom/client";
 import React from "react";
 import "./index.css";
+import App from "./App";
 
-// Simple static application that doesn't rely on complex React components or API calls
+// This app is no longer used, as we've implemented the full application in App.tsx
+// Keeping this here for reference and we'll render App.tsx instead
 const StaticApp = () => {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
@@ -277,4 +279,4 @@ const StaticApp = () => {
 // Add a global title
 document.title = "NebulaOne - All-in-One Productivity Workspace";
 
-createRoot(document.getElementById("root")!).render(<StaticApp />);
+createRoot(document.getElementById("root")!).render(<App />);
