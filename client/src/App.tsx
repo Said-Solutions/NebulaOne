@@ -46,12 +46,7 @@ const DocumentDetailPage = lazy(() => import('./pages/document-detail'));
 
 const TimelinePage = lazy(() => import('./pages/timeline'));
 
-const AIAssistantPage = lazy(() => Promise.resolve({
-  default: () => <PlaceholderModule 
-    title="AI Assistant Module" 
-    description="Intelligent assistant for productivity (Read.ai alternative)" 
-  />
-}));
+const AIAssistantPage = lazy(() => import('./pages/ai'));
 
 const SettingsPage = lazy(() => Promise.resolve({
   default: () => <PlaceholderModule 
