@@ -74,6 +74,7 @@ function Router() {
   const standaloneRoutes = [
     { path: "/debug", component: DebugPage },
     { path: "/auth", component: lazy(() => import('./pages/auth-page')) },
+    { path: "/subscribe", component: lazy(() => import('./pages/subscribe')) },
   ];
 
   return (
