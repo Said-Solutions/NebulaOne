@@ -346,9 +346,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.updateStripeCustomerId(user.id, customerId);
 
       res.json({
-        subscriptionId: subscription.id,
-        status: subscription.status,
-        clientSecret
+        clientSecret,
+        amount: 1299, // $12.99
+        currency: 'usd'
       });
     } catch (error) {
       console.error('Error creating subscription:', error);
