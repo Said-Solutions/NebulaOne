@@ -1,286 +1,262 @@
-type MessageHandler = (data: any) => void;
-type ConnectionStateChangeHandler = (connected: boolean) => void;
+/**
+ * WebSocket client utility for NebulaOne application
+ * Handles WebSocket connection, message handling, and reconnection logic
+ */
 
-interface WebSocketMessage {
+// Maximum number of reconnection attempts
+const MAX_RECONNECT_ATTEMPTS = 5;
+
+// Type for WebSocket message handlers
+export type MessageHandler = (data: any) => void;
+
+// WebSocket connection status
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'failed';
+
+// Type for WebSocket message 
+export interface WebSocketMessage {
   type: string;
-  [key: string]: any;
+  data?: any;
 }
 
-/**
- * A utility class for managing WebSocket connections
- */
-export class WebSocketClient {
-  private ws: WebSocket | null = null;
-  private url: string;
+// WebSocket client implementation
+class WebSocketClient {
+  private socket: WebSocket | null = null;
+  private reconnectAttempts = 0;
+  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private messageHandlers: Map<string, Set<MessageHandler>> = new Map();
-  private connectionStateChangeHandlers: Set<ConnectionStateChangeHandler> = new Set();
-  private reconnectTimeout: number = 2000; // Starting timeout in ms
-  private maxReconnectTimeout: number = 30000; // Max timeout in ms
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private pingInterval: ReturnType<typeof setInterval> | null = null;
-  private isConnected: boolean = false;
-  private isReconnecting: boolean = false;
+  private connectionListeners: Set<(status: ConnectionStatus) => void> = new Set();
+  private url: string | null = null;
+  private status: ConnectionStatus = 'disconnected';
 
-  /**
-   * Creates a new WebSocketClient instance
-   * @param baseUrl - The base URL of the server (without protocol)
-   */
-  constructor(baseUrl?: string) {
-    // Determine the WebSocket URL based on the current window location
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = baseUrl || window.location.host;
-    this.url = `${protocol}//${host}/ws`;
+  constructor() {
+    // Setup reconnection handling for page visibility changes
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
   }
 
   /**
-   * Connect to the WebSocket server
+   * Initialize the WebSocket connection
    */
-  connect(): void {
-    if (this.ws) {
-      // Already connected or connecting
+  public connect(): void {
+    // Only connect if we're not already connected
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      console.log('WebSocket already connected');
+      return;
+    }
+
+    this.updateStatus('connecting');
+    try {
+      // Get the current hostname and appropriate WebSocket protocol
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.url = `${protocol}//${window.location.host}/ws`;
+
+      console.log(`Connecting to WebSocket at ${this.url}`);
+      
+      // Create the WebSocket connection
+      this.socket = new WebSocket(this.url);
+      
+      // Setup event handlers
+      this.socket.onopen = this.handleOpen;
+      this.socket.onclose = this.handleClose;
+      this.socket.onerror = this.handleError;
+      this.socket.onmessage = this.handleMessage;
+    } catch (error) {
+      console.error('Failed to establish WebSocket connection', error);
+      this.updateStatus('failed');
+    }
+  }
+
+  /**
+   * Disconnect the WebSocket connection
+   */
+  public disconnect(): void {
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+    
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    
+    this.updateStatus('disconnected');
+  }
+
+  /**
+   * Send a message through the WebSocket connection
+   */
+  public send(type: string, data: any = {}): void {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      console.warn('Cannot send message: WebSocket is not connected');
       return;
     }
 
     try {
-      console.log(`Connecting to WebSocket at ${this.url}`);
-      this.ws = new WebSocket(this.url);
-
-      this.ws.onopen = this.handleOpen.bind(this);
-      this.ws.onclose = this.handleClose.bind(this);
-      this.ws.onerror = this.handleError.bind(this);
-      this.ws.onmessage = this.handleMessage.bind(this);
+      this.socket.send(JSON.stringify({ type, data }));
     } catch (error) {
-      console.error('Error establishing WebSocket connection:', error);
-      this.scheduleReconnect();
+      console.error('Error sending WebSocket message', error);
     }
   }
 
   /**
-   * Disconnect from the WebSocket server
+   * Subscribe to a specific message type
+   * @returns A function to unsubscribe the handler
    */
-  disconnect(): void {
-    this.clearTimers();
-    
-    if (this.ws) {
-      this.ws.onopen = null;
-      this.ws.onclose = null;
-      this.ws.onerror = null;
-      this.ws.onmessage = null;
-      
-      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-        this.ws.close();
-      }
-      
-      this.ws = null;
-    }
-    
-    if (this.isConnected) {
-      this.isConnected = false;
-      this.notifyConnectionStateChange(false);
-    }
-  }
-
-  /**
-   * Send a message to the WebSocket server
-   * @param type - The message type
-   * @param data - The message data
-   */
-  send(type: string, data: any = {}): boolean {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('Cannot send message: WebSocket is not connected');
-      return false;
-    }
-
-    try {
-      const message: WebSocketMessage = {
-        type,
-        ...data,
-        timestamp: Date.now()
-      };
-      
-      this.ws.send(JSON.stringify(message));
-      return true;
-    } catch (error) {
-      console.error('Error sending message:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Register a handler for a specific message type
-   * @param type - The message type to listen for
-   * @param handler - The function to call when a message of this type is received
-   */
-  on(type: string, handler: MessageHandler): void {
+  public subscribe(type: string, handler: MessageHandler): () => void {
     if (!this.messageHandlers.has(type)) {
       this.messageHandlers.set(type, new Set());
     }
     
-    this.messageHandlers.get(type)!.add(handler);
-  }
-
-  /**
-   * Remove a handler for a specific message type
-   * @param type - The message type
-   * @param handler - The handler to remove
-   */
-  off(type: string, handler: MessageHandler): void {
-    if (!this.messageHandlers.has(type)) {
-      return;
-    }
+    const handlers = this.messageHandlers.get(type)!;
+    handlers.add(handler);
     
-    this.messageHandlers.get(type)!.delete(handler);
+    return () => {
+      const handlersSet = this.messageHandlers.get(type);
+      if (handlersSet) {
+        handlersSet.delete(handler);
+        if (handlersSet.size === 0) {
+          this.messageHandlers.delete(type);
+        }
+      }
+    };
+  }
+
+  /**
+   * Subscribe to connection status changes
+   * @returns A function to unsubscribe the listener
+   */
+  public subscribeToStatus(listener: (status: ConnectionStatus) => void): () => void {
+    this.connectionListeners.add(listener);
+    // Immediately notify with current status
+    listener(this.status);
     
-    if (this.messageHandlers.get(type)!.size === 0) {
-      this.messageHandlers.delete(type);
-    }
+    return () => {
+      this.connectionListeners.delete(listener);
+    };
   }
 
   /**
-   * Register a handler for connection state changes
-   * @param handler - The function to call when the connection state changes
+   * Get the current connection status
    */
-  onConnectionStateChange(handler: ConnectionStateChangeHandler): void {
-    this.connectionStateChangeHandlers.add(handler);
-    
-    // Immediately notify the handler of the current state
-    handler(this.isConnected);
+  public getStatus(): ConnectionStatus {
+    return this.status;
   }
 
   /**
-   * Remove a connection state change handler
-   * @param handler - The handler to remove
+   * Check if the WebSocket is currently connected
    */
-  offConnectionStateChange(handler: ConnectionStateChangeHandler): void {
-    this.connectionStateChangeHandlers.delete(handler);
+  public isConnected(): boolean {
+    return this.socket?.readyState === WebSocket.OPEN;
   }
 
-  /**
-   * Handle WebSocket open event
-   */
-  private handleOpen(): void {
+  // Handler for WebSocket open event
+  private handleOpen = (): void => {
     console.log('WebSocket connection established');
-    this.isConnected = true;
-    this.isReconnecting = false;
-    this.reconnectTimeout = 2000; // Reset reconnect timeout
-    this.notifyConnectionStateChange(true);
-    
-    // Setup ping interval to keep the connection alive
-    this.pingInterval = setInterval(() => {
-      this.send('ping');
-    }, 30000);
-  }
+    this.reconnectAttempts = 0;
+    this.updateStatus('connected');
+  };
 
-  /**
-   * Handle WebSocket close event
-   */
-  private handleClose(event: CloseEvent): void {
+  // Handler for WebSocket close event
+  private handleClose = (event: CloseEvent): void => {
     console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
+    this.socket = null;
     
-    this.clearTimers();
-    this.ws = null;
-    
-    if (this.isConnected) {
-      this.isConnected = false;
-      this.notifyConnectionStateChange(false);
+    // Only attempt reconnection if not a normal closure or we're not at max attempts
+    if ((event.code !== 1000 && event.code !== 1001) && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      this.scheduleReconnect();
+    } else {
+      this.updateStatus('disconnected');
     }
-    
-    this.scheduleReconnect();
-  }
+  };
 
-  /**
-   * Handle WebSocket error event
-   */
-  private handleError(event: Event): void {
-    console.error('WebSocket error:', event);
-    
-    // The onclose handler will be called after this,
-    // which will attempt to reconnect
-  }
+  // Handler for WebSocket error event
+  private handleError = (event: Event): void => {
+    console.error('WebSocket error occurred', event);
+    if (this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      this.scheduleReconnect();
+    } else {
+      this.updateStatus('failed');
+    }
+  };
 
-  /**
-   * Handle WebSocket message event
-   */
-  private handleMessage(event: MessageEvent): void {
+  // Handler for WebSocket message event
+  private handleMessage = (event: MessageEvent): void => {
     try {
-      const data = JSON.parse(event.data);
-      const type = data.type;
+      const message = JSON.parse(event.data) as WebSocketMessage;
       
-      if (!type) {
-        console.warn('Received message without type:', data);
+      // If no type, ignore the message
+      if (!message.type) {
+        console.warn('Received WebSocket message without type', message);
         return;
       }
       
-      // Dispatch the message to all handlers for its type
-      if (this.messageHandlers.has(type)) {
-        this.messageHandlers.get(type)!.forEach((handler) => {
+      // Find handlers for this message type and invoke them
+      const handlers = this.messageHandlers.get(message.type);
+      if (handlers) {
+        handlers.forEach(handler => {
           try {
-            handler(data);
-          } catch (error) {
-            console.error(`Error in message handler for type "${type}":`, error);
+            handler(message.data);
+          } catch (handlerError) {
+            console.error(`Error in message handler for type '${message.type}'`, handlerError);
           }
         });
       }
     } catch (error) {
-      console.error('Error parsing WebSocket message:', error);
+      console.error('Error parsing WebSocket message', error, event.data);
     }
-  }
+  };
 
-  /**
-   * Schedule a reconnection attempt
-   */
-  private scheduleReconnect(): void {
-    if (this.isReconnecting || this.reconnectTimer) {
-      return;
-    }
-    
-    this.isReconnecting = true;
-    console.log(`Scheduling reconnect attempt in ${this.reconnectTimeout}ms`);
-    
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      
-      console.log('Attempting to reconnect...');
+  // Handle page visibility changes (reconnect when page becomes visible)
+  private handleVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible' && !this.isConnected()) {
+      console.log('Page became visible, reconnecting WebSocket...');
       this.connect();
-      
-      // Exponential backoff for reconnect attempts
-      this.reconnectTimeout = Math.min(this.reconnectTimeout * 1.5, this.maxReconnectTimeout);
-    }, this.reconnectTimeout);
-  }
+    }
+  };
 
-  /**
-   * Clear all timers
-   */
-  private clearTimers(): void {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
+  // Schedule a reconnection attempt with exponential backoff
+  private scheduleReconnect(): void {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
     }
     
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    this.updateStatus('reconnecting');
+    this.reconnectAttempts++;
+    
+    // Calculate backoff time: 1s, 2s, 4s, 8s, 16s
+    const backoff = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 16000);
+    
+    console.log(`Scheduling WebSocket reconnection in ${backoff}ms (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+    
+    this.reconnectTimeout = setTimeout(() => {
+      this.connect();
+    }, backoff);
   }
 
-  /**
-   * Notify all connection state change handlers
-   */
-  private notifyConnectionStateChange(connected: boolean): void {
-    this.connectionStateChangeHandlers.forEach((handler) => {
+  // Update the connection status and notify listeners
+  private updateStatus(status: ConnectionStatus): void {
+    this.status = status;
+    this.connectionListeners.forEach(listener => {
       try {
-        handler(connected);
+        listener(status);
       } catch (error) {
-        console.error('Error in connection state change handler:', error);
+        console.error('Error in connection status listener', error);
       }
     });
   }
 }
 
-// Create and export a singleton instance
+// Create a singleton instance of the WebSocket client
 export const websocketClient = new WebSocketClient();
 
-// React hook for the WebSocket connection
-export function useWebSocket() {
-  return websocketClient;
+// Auto-connect when the module is imported
+if (typeof window !== 'undefined') {
+  // Try to connect after a small delay to ensure DOM is ready
+  setTimeout(() => {
+    websocketClient.connect();
+  }, 100);
 }
+
+export default websocketClient;
