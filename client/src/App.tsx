@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
+import Dashboard from "@/pages/dashboard";
 import DebugPage from "@/pages/debug";
 import { ThemeProvider } from "./components/ui/theme-provider";
 import MainLayout from "@/components/layout/MainLayout";
@@ -90,7 +91,8 @@ const SettingsPage = lazy(() => Promise.resolve({
 function Router() {
   // Routes that should use the main layout
   const mainLayoutRoutes = [
-    { path: "/", component: Home },
+    { path: "/", component: Dashboard },
+    { path: "/home", component: Home },
     { path: "/chat", component: ChatPage },
     { path: "/email", component: EmailPage },
     { path: "/meetings", component: MeetingsPage },
