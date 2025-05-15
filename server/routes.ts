@@ -325,28 +325,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateStripeCustomerId(user.id, customerId);
       }
 
-      // Create subscription
-      const subscription = await stripe.subscriptions.create({
+      // Create a payment intent instead of subscription for demo purposes
+      const paymentIntent = await stripe.paymentIntents.create({
         customer: customerId,
-        items: [{
-          price: process.env.STRIPE_PRICE_ID || 'price_1OwyiTPYhdXReTtMiNSm91Cx', // Default price ID (should be configured in env)
-        }],
-        payment_behavior: 'default_incomplete',
-        expand: ['latest_invoice.payment_intent'],
+        amount: 1299, // $12.99 in cents
+        currency: 'usd',
+        automatic_payment_methods: {
+          enabled: true,
+        },
         metadata: {
-          userId: user.id
+          userId: user.id,
+          type: 'subscription'
         }
       });
 
-      // Get the client secret from the subscription
-      const invoice = subscription.latest_invoice as any;
-      const clientSecret = invoice?.payment_intent?.client_secret;
+      // Get the client secret from the payment intent
+      const clientSecret = paymentIntent.client_secret;
 
-      // Update user with subscription details
-      await storage.updateUserStripeInfo(user.id, {
-        customerId: customerId,
-        subscriptionId: subscription.id
-      });
+      // Update user with customer ID (we'll update subscription details after payment)
+      await storage.updateStripeCustomerId(user.id, customerId);
 
       res.json({
         subscriptionId: subscription.id,

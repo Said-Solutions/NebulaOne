@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Register mutation
   const registerMutation = useMutation({
-    mutationFn: async (userData: RegisterData): Promise<User> => {
+    mutationFn: async (userData: RegisterData): Promise<User & { isNewRegistration?: boolean }> => {
       const res = await apiRequest("POST", "/api/register", userData);
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -103,12 +103,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return await res.json();
     },
-    onSuccess: (userData: User) => {
+    onSuccess: (userData: User & { isNewRegistration?: boolean }) => {
       queryClient.setQueryData(["/api/user"], userData);
-      toast({
-        title: "Registration successful",
-        description: `Welcome to NebulaOne, ${userData.name}!`,
-      });
+      
+      // If this is a new registration, redirect to subscription page
+      if (userData.isNewRegistration) {
+        toast({
+          title: "Registration successful",
+          description: "Please set up your subscription to continue.",
+        });
+        window.location.href = "/subscribe";
+      } else {
+        toast({
+          title: "Registration successful",
+          description: `Welcome to NebulaOne, ${userData.name}!`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({

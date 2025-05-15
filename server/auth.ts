@@ -134,10 +134,11 @@ export function setupAuth(app: Express): void {
       // Remove password from response
       const { password: _, ...userWithoutPassword } = user;
 
-      // Log the user in
+      // Log the user in and indicate this is a new registration
       req.login(userWithoutPassword, (err) => {
         if (err) return next(err);
-        res.status(201).json(userWithoutPassword);
+        // Send a flag to indicate this is a new user that needs to go through subscription flow
+        res.status(201).json({ ...userWithoutPassword, isNewRegistration: true });
       });
     } catch (error) {
       res.status(500).json({ message: "Error creating user" });
