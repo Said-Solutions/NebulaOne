@@ -10,6 +10,8 @@ import Dashboard from "@/pages/dashboard";
 import DebugPage from "@/pages/debug";
 import { ThemeProvider } from "./components/ui/theme-provider";
 import MainLayout from "@/components/layout/MainLayout";
+import { ProtectedRoute } from "./lib/protected-route";
+import { AuthProvider } from "./hooks/use-auth";
 
 // Loading component
 const PageLoader = () => (
@@ -71,14 +73,15 @@ function Router() {
   // Routes that use their own layout
   const standaloneRoutes = [
     { path: "/debug", component: DebugPage },
+    { path: "/auth", component: lazy(() => import('./pages/auth-page')) },
   ];
 
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
-        {/* Main layout routes */}
+        {/* Main layout routes - protected */}
         {mainLayoutRoutes.map(({ path, component: Component }) => (
-          <Route
+          <ProtectedRoute
             key={path}
             path={path}
             component={() => (
@@ -104,12 +107,14 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="light" storageKey="nebulaone-theme">
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider defaultTheme="light" storageKey="nebulaone-theme">
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
