@@ -1400,15 +1400,25 @@ export default function SettingsPage() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <BadgeCheck className="h-5 w-5 text-primary" />
-                          <h4 className="text-lg font-semibold">{user?.subscriptionPlan || "Premium Plan"}</h4>
+                          <div className="bg-primary/20 p-1.5 rounded-full">
+                            <BadgeCheck className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-semibold">{user?.subscriptionPlan || "Premium Plan"}</h4>
+                            <p className="text-xs text-muted-foreground">All features unlocked</p>
+                          </div>
                         </div>
-                        <span className="px-2.5 py-0.5 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
-                          Active
-                        </span>
+                        <div className="flex flex-col items-end">
+                          <span className="px-2.5 py-0.5 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                            Active
+                          </span>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Since {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', {month: 'short', year: 'numeric'}) : 'signup'}
+                          </p>
+                        </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="bg-muted/50 rounded-lg p-4 grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Billing Cycle</p>
                           <p className="font-medium">Monthly</p>
@@ -1423,10 +1433,22 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       
-                      <div className="flex flex-col gap-2 pt-2">
-                        <Button variant="outline" onClick={() => navigate("/subscribe?manage=true")}>
-                          Manage Billing
+                      <div className="flex gap-2 pt-2">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => navigate("/subscribe?manage=true")}
+                          className="flex-1"
+                        >
+                          <CreditCard className="h-4 w-4 mr-1.5" />
+                          Update Payment
                         </Button>
+                        <Button 
+                          variant="outline" 
+                          className="flex-1 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          Cancel Subscription
+                        </Button>
+                      </div>
                       </div>
                     </div>
                   ) : (
@@ -1443,10 +1465,18 @@ export default function SettingsPage() {
                       </p>
                       
                       <div className="space-y-2 pt-2">
-                        <Button onClick={() => navigate("/subscribe")}>
-                          <CreditCard className="mr-2 h-4 w-4" />
-                          Upgrade to Premium
-                        </Button>
+                        <div className="bg-gradient-to-r from-primary to-purple-600 p-0.5 rounded-lg">
+                          <Button 
+                            onClick={() => navigate("/subscribe")}
+                            className="w-full bg-white hover:bg-transparent hover:text-white dark:bg-gray-900 dark:hover:bg-transparent"
+                          >
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            Upgrade to Premium
+                          </Button>
+                        </div>
+                        <p className="text-xs text-center text-muted-foreground">
+                          Cancel anytime. No hidden fees.
+                        </p>
                       </div>
                     </div>
                   )}
