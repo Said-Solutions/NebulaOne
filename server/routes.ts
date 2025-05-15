@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import fs from "fs";
 
@@ -171,20 +171,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create HTTP server
   const httpServer = createServer(app);
 
-  // Setup WebSocket server for real-time updates
-  const wss = new WebSocketServer({ server: httpServer });
+  // Setup WebSocket server for real-time updates on a distinct path to avoid conflict with Vite's HMR
+  const wss = new WebSocketServer({ 
+    server: httpServer, 
+    path: '/ws',
+    perMessageDeflate: false
+  });
 
   wss.on('connection', (ws) => {
-    console.log('Client connected');
+    console.log('WebSocket client connected to /ws path');
+
+    // Keep the connection alive with pings
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.ping();
+      }
+    }, 30000);
 
     ws.on('message', (message) => {
-      console.log('Received message:', message);
-      // Handle different message types here
+      try {
+        const data = JSON.parse(message.toString());
+        console.log('Received WebSocket message:', data);
+        
+        // Handle different message types
+        if (data.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+        }
+      } catch (error) {
+        console.error('Error processing message:', error);
+      }
+    });
+
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
     });
 
     ws.on('close', () => {
-      console.log('Client disconnected');
+      console.log('WebSocket client disconnected');
+      clearInterval(pingInterval);
     });
+
+    // Send initial data
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+          type: 'connected', 
+          message: 'Connected to NebulaOne WebSocket server',
+          timestamp: Date.now()
+        }));
+      }
+    } catch (error) {
+      console.error('Error sending initial data:', error);
+    }
+  });
+
+  wss.on('error', (error) => {
+    console.error('WebSocket server error:', error);
   });
 
   return httpServer;
