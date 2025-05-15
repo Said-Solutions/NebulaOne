@@ -68,5 +68,5 @@ export const useWebSocket = () => {
     };
   }, []);
 
-  return { socket, isConnected, error };
+  return { socket: socket, isConnected, error };
 };

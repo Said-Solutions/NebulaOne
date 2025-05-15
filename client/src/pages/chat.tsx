@@ -472,7 +472,7 @@ const ChatPage = () => {
   const [codeSnippet, setCodeSnippet] = useState('');
   const messageEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const socketRef = useWebSocket();
+  const { socket, isConnected, error: socketError } = useWebSocket();
   const [currentChannel, setCurrentChannel] = useState<ChatThreadType | null>(null);
   
   // Static data for demo channels
@@ -519,6 +519,13 @@ const ChatPage = () => {
     queryKey: ['/api/chats', activeChat],
     enabled: !!activeChat,
     retry: false,
+    select: (data: any): ChatThreadType => {
+      // Ensure messages is an array
+      return {
+        ...data,
+        messages: Array.isArray(data?.messages) ? data.messages : []
+      };
+    }
   });
   
   // Mutation to send a message
@@ -538,10 +545,12 @@ const ChatPage = () => {
       };
       
       // We should also emit this message via WebSocket for real-time updates
-      socketRef.current?.send(JSON.stringify({
-        type: 'chat_message',
-        data: newMessage
-      }));
+      if (socket.current && socket.current.readyState === WebSocket.OPEN) {
+        socket.current.send(JSON.stringify({
+          type: 'chat_message',
+          data: newMessage
+        }));
+      }
       
       return newMessage;
     },
@@ -581,7 +590,7 @@ const ChatPage = () => {
   
   // Set up WebSocket message handler for real-time updates
   useEffect(() => {
-    if (!socketRef.current) return;
+    if (!socket.current) return;
     
     const handleMessage = (event: MessageEvent) => {
       try {
@@ -607,12 +616,12 @@ const ChatPage = () => {
       }
     };
     
-    socketRef.current.addEventListener('message', handleMessage);
+    socket.current.addEventListener('message', handleMessage);
     
     return () => {
-      socketRef.current?.removeEventListener('message', handleMessage);
+      socket.current?.removeEventListener('message', handleMessage);
     };
-  }, [socketRef.current, activeChat]);
+  }, [socket, activeChat]);
   
   // Effect to scroll to the bottom of the chat when messages change
   useEffect(() => {
