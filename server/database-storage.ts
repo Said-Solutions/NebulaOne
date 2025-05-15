@@ -135,9 +135,15 @@ export class DatabaseStorage implements IStorage {
   async addTimelineItem(item: Omit<TimelineItemType, "id">): Promise<TimelineItemType> {
     try {
       const id = nanoid();
-      const newItem = { ...item, id };
-      const result = await db.insert(timeline).values(newItem).returning();
-      return fixType<TimelineItemType>(result[0]);
+      // Create a new item without the data field as it's not part of the table schema
+      const { data, ...itemWithoutData } = item;
+      const newItem = { ...itemWithoutData, id };
+      
+      // Insert into database - data is managed separately
+      const result = await db.insert(timeline).values([newItem]).returning();
+      
+      // Return the full item with data for the API
+      return fixType<TimelineItemType>({ ...result[0], data });
     } catch (error) {
       console.error("Failed to add timeline item:", error);
       throw error;
@@ -205,6 +211,7 @@ export class DatabaseStorage implements IStorage {
         type: 'task',
         itemId: id,
         createdAt: new Date(),
+        data: { ...insertedTask, assignee }
       });
       
       // Return task with assignee info
@@ -349,6 +356,7 @@ export class DatabaseStorage implements IStorage {
         type: 'chat',
         itemId: id,
         createdAt: new Date(),
+        data: { ...insertedChat, messages: insertedMessages }
       });
       
       return fixType<ChatThreadType>({ 
@@ -478,6 +486,7 @@ export class DatabaseStorage implements IStorage {
         type: 'document',
         itemId: id,
         createdAt: new Date(),
+        data: { ...insertedDocument, collaborators }
       });
       
       return fixType<DocumentType>({ ...insertedDocument, collaborators });
@@ -627,6 +636,7 @@ export class DatabaseStorage implements IStorage {
         type: 'meeting',
         itemId: id,
         createdAt: new Date(),
+        data: { ...insertedMeeting, participants }
       });
       
       return fixType<MeetingType>({ ...insertedMeeting, participants });
@@ -697,6 +707,7 @@ export class DatabaseStorage implements IStorage {
         type: 'email',
         itemId: id,
         createdAt: new Date(),
+        data: { ...insertedEmail, sender }
       });
       
       return fixType<EmailType>({ ...insertedEmail, sender });
