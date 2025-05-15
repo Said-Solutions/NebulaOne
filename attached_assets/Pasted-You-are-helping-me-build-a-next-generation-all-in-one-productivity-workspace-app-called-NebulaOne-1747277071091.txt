@@ -1,0 +1,61 @@
+You are helping me build a next-generation, all-in-one productivity workspace app called **NebulaOne**. This app will replace Slack, Shortwave, Google Meet, Jira, Confluence, Loom, and Read.ai — but designed around the principles of:
+
+✅ **Local AI** (on-device LLMs, no cloud dependencies)  
+✅ **Unified knowledge graph** (notes, chat, tasks, docs all as addressable objects)  
+✅ **Offline-first UX**  
+✅ **Privacy, speed, and cost as product features**  
+✅ **Zero context-switching** – everything happens in a single timeline/workspace
+
+I will upload screenshots of the following apps for reference:
+- Slack (chat)
+- Shortwave (AI email)
+- Google Meet (video calls)
+- Jira (tasks/sprints)
+- Confluence (wiki/docs)
+- Read AI (meeting summary)
+- Loom (recorded screen+voice)
+
+---
+
+**Your task:**
+
+1. **Review the screenshots**, identify key UX flows from each tool (chat threads, issue boards, smart inbox, video calling, meeting notes, wiki editing, etc.).
+2. **Rebuild those flows in NebulaOne**, but fully integrated into **one unified workspace** — no tab-switching or data silos.
+3. **Replace cloud AI calls** with local inference flows:
+   - Use `Phi-3-mini` (4-bit) for summarisation, rewrite, tone, tasks, autocomplete
+   - Use `Whisper-small` for transcription/captions
+   - Use `E5-small` or `Instructor` models for vector search + semantic memory
+   - All models run locally via `llama.cpp`, `whisper.cpp`, or `MLC.ai`
+4. **Design the UI with radical simplicity** — think Notion x Linear x Slack, with timeline as the central canvas:
+   - Chat threads
+   - Auto-generated tasks
+   - Inline docs and notes
+   - Captured meetings
+   - Smart summaries and action items
+   - Mail preview and inline reply
+   - Commands like `/summarise`, `/task`, `/translate`, `/record`
+
+5. Use:
+   - **Tailwind** for styling
+   - **React / Tauri** (desktop app) 
+   - **SQLite or WatermelonDB** for graph storage
+   - All AI should run in-browser or in-app via embedded models (no API)
+
+---
+
+💡 **Examples of features you should implement:**
+- A unified timeline component that can show: messages, tasks, docs, emails, summaries
+- Slash commands (`/task`, `/summarise`, `/note`, `/record`)
+- Vector-based semantic search bar
+- Meeting recorder that captions locally and pushes a summary object to the timeline
+- Voice-to-text note-taking with local LLM summary
+- Drag-and-drop task creation from chat or email
+- Hover to link between any object (message → task → doc)
+
+---
+
+Your outputs should:
+- Scaffold components for each of these objects: `Message`, `TaskCard`, `MeetingSummary`, `DocPage`, `EmailItem`
+- Make each item addressable (e.g. `/doc/42#L12`)
+- Show confidence badges for AI-generated content
+- Run fast, offline, and modular
