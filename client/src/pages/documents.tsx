@@ -295,7 +295,7 @@ export default function DocumentsPage() {
                       </div>
                       <div>
                         <CardTitle className="text-base hover:text-blue-600 hover:underline">
-                          <Link href={`/documents/${doc.id}`}>
+                          <Link to={`/documents/${doc.id}`}>
                             {doc.title}
                           </Link>
                         </CardTitle>

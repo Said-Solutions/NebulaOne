@@ -40,12 +40,9 @@ const MeetingsPage = lazy(() => import('./pages/meetings'));
 
 const TasksPage = lazy(() => import('./pages/tasks'));
 
-const DocumentsPage = lazy(() => Promise.resolve({
-  default: () => <PlaceholderModule 
-    title="Documents Module" 
-    description="Collaborative document editing (Confluence alternative)" 
-  />
-}));
+const DocumentsPage = lazy(() => import('./pages/documents'));
+
+const DocumentDetailPage = lazy(() => import('./pages/document-detail'));
 
 const TimelinePage = lazy(() => Promise.resolve({
   default: () => <PlaceholderModule 
@@ -77,7 +74,10 @@ function Router() {
     { path: "/email", component: EmailPage },
     { path: "/meetings", component: MeetingsPage },
     { path: "/tasks", component: TasksPage },
+    { path: "/tasks/projects/:key", component: TasksPage },
+    { path: "/tasks/projects/:key/board", component: TasksPage },
     { path: "/documents", component: DocumentsPage },
+    { path: "/documents/:id", component: DocumentDetailPage },
     { path: "/timeline", component: TimelinePage },
     { path: "/ai", component: AIAssistantPage },
     { path: "/settings", component: SettingsPage },
