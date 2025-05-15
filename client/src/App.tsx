@@ -36,12 +36,7 @@ const ChatPage = lazy(() => import('./pages/chat'));
 
 const EmailPage = lazy(() => import('./pages/email'));
 
-const MeetingsPage = lazy(() => Promise.resolve({
-  default: () => <PlaceholderModule 
-    title="Meetings Module" 
-    description="Video conferencing and meeting management (Google Meet alternative)" 
-  />
-}));
+const MeetingsPage = lazy(() => import('./pages/meetings'));
 
 const TasksPage = lazy(() => Promise.resolve({
   default: () => <PlaceholderModule 
