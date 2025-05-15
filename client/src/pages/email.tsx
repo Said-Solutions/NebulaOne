@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { nanoid } from 'nanoid';
+import EmailAiAssistantPanel from '@/components/email/EmailAiAssistantPanel';
+import { EmailAiAssistant } from '@/lib/emailAiAssistant';
 import { 
   Inbox as LucideInbox, 
   Archive as LucideArchive,
@@ -609,12 +611,17 @@ const ComposeEmail = ({
   );
 };
 
+
+
 // Main Email Page Component
 const EmailPage = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('primary');
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
   const [composeOpen, setComposeOpen] = useState(false);
+  const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [tasks, setTasks] = useState<any[]>([]);
   
   // Sample data for email threads
   const [emailThreads, setEmailThreads] = useState<EmailThread[]>([
@@ -893,22 +900,83 @@ const EmailPage = () => {
     }
   };
   
+  // Handle marking an email thread as completed (for inbox zero)
+  const handleMarkAsCompleted = (threadId: string) => {
+    setEmailThreads(prev => 
+      prev.map(thread => 
+        thread.id === threadId 
+          ? { ...thread, isCompleted: true, isRead: true }
+          : thread
+      )
+    );
+  };
+  
+  // Handle updating threads (used by AI assistant)
+  const handleUpdateThreads = (updatedThreads: EmailThread[]) => {
+    // Create a map of updated threads by id
+    const updatedThreadsMap = updatedThreads.reduce((map, thread) => {
+      map[thread.id] = thread;
+      return map;
+    }, {} as Record<string, EmailThread>);
+    
+    // Update only the threads that have changed
+    setEmailThreads(prev => 
+      prev.map(thread => 
+        updatedThreadsMap[thread.id] 
+          ? updatedThreadsMap[thread.id] 
+          : thread
+      )
+    );
+  };
+  
+  // Handle creating a task from an email
+  const handleCreateTask = (task: any) => {
+    setTasks(prev => [...prev, task]);
+    
+    // Mark the related email as read
+    setEmailThreads(prev => 
+      prev.map(thread => 
+        thread.id === task.emailThreadId 
+          ? { ...thread, isRead: true }
+          : thread
+      )
+    );
+  };
+  
   // Filter threads by the selected category
-  const filteredThreads = emailThreads.filter(thread => thread.category === selectedCategory);
+  const filteredThreads = emailThreads.filter(thread => {
+    // Filter by category
+    const categoryMatch = thread.category === selectedCategory;
+    
+    // If showing completed, return all threads that match the category
+    if (showCompleted) {
+      return categoryMatch;
+    }
+    
+    // Otherwise only show non-completed threads
+    return categoryMatch && !thread.isCompleted;
+  });
   
   // Count of unread emails per category
   const unreadCounts = {
-    primary: emailThreads.filter(t => t.category === 'primary' && !t.isRead).length,
-    social: emailThreads.filter(t => t.category === 'social' && !t.isRead).length,
-    promotions: emailThreads.filter(t => t.category === 'promotions' && !t.isRead).length,
-    updates: emailThreads.filter(t => t.category === 'updates' && !t.isRead).length,
-    forums: emailThreads.filter(t => t.category === 'forums' && !t.isRead).length
+    primary: emailThreads.filter(t => t.category === 'primary' && !t.isRead && !t.isCompleted).length,
+    social: emailThreads.filter(t => t.category === 'social' && !t.isRead && !t.isCompleted).length,
+    promotions: emailThreads.filter(t => t.category === 'promotions' && !t.isRead && !t.isCompleted).length,
+    updates: emailThreads.filter(t => t.category === 'updates' && !t.isRead && !t.isCompleted).length,
+    forums: emailThreads.filter(t => t.category === 'forums' && !t.isRead && !t.isCompleted).length
   };
   
   // Get the selected thread
   const selectedThread = selectedThreadId 
     ? emailThreads.find(thread => thread.id === selectedThreadId) 
     : null;
+    
+  // Get completion stats for inbox zero
+  const totalThreads = emailThreads.length;
+  const completedThreads = emailThreads.filter(t => t.isCompleted).length;
+  const completionPercentage = totalThreads > 0 
+    ? Math.round((completedThreads / totalThreads) * 100) 
+    : 0;
   
   return (
     <div className="flex h-full overflow-hidden">
