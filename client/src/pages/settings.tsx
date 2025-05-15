@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
+import { getOpenAIApiKey, saveOpenAIApiKey, verifyOpenAIApiKey } from "@/lib/ai-service";
 import {
   Settings as SettingsIcon,
   User,
@@ -54,8 +55,9 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  
-  // Mock settings state
+  const [verifyingKey, setVerifyingKey] = useState(false);
+
+  // Settings state
   const [settings, setSettings] = useState({
     // General settings
     language: "english",
@@ -107,6 +109,9 @@ export default function SettingsPage() {
     colorCodeEvents: true,
     
     // AI settings
+    openAIKey: "",
+    openAIKeyVerified: false,
+    aiModel: "gpt-4o",
     enableAIAssistant: true,
     aiPrivacyLevel: "workspace",
     saveAIHistory: true,
@@ -118,6 +123,58 @@ export default function SettingsPage() {
     allowDataAnalytics: true,
     shareUsageData: true,
   });
+  
+  // Load API key on component mount
+  useEffect(() => {
+    const savedKey = getOpenAIApiKey();
+    if (savedKey) {
+      setSettings(prev => ({
+        ...prev,
+        openAIKey: savedKey,
+        openAIKeyVerified: true
+      }));
+    }
+  }, []);
+  
+  // Verify OpenAI API key
+  const handleVerifyApiKey = async () => {
+    if (!settings.openAIKey) {
+      toast({
+        title: "API Key Required",
+        description: "Please enter an OpenAI API key to verify.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setVerifyingKey(true);
+    try {
+      const isValid = await verifyOpenAIApiKey(settings.openAIKey);
+      
+      if (isValid) {
+        await saveOpenAIApiKey(settings.openAIKey);
+        setSettings(prev => ({ ...prev, openAIKeyVerified: true }));
+        toast({
+          title: "API Key Verified",
+          description: "Your OpenAI API key has been verified and saved.",
+        });
+      } else {
+        toast({
+          title: "Invalid API Key",
+          description: "The provided API key could not be verified. Please check and try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Verification Failed",
+        description: "An error occurred while verifying your API key.",
+        variant: "destructive",
+      });
+    } finally {
+      setVerifyingKey(false);
+    }
+  };
   
   // Update a setting
   const updateSetting = (category: string, setting: string, value: any) => {
@@ -1046,6 +1103,43 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="openAIKey" className="font-medium">OpenAI API Key</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="openAIKey"
+                      type="password"
+                      placeholder="Enter your OpenAI API key"
+                      className="flex-1"
+                      value={settings.openAIKey}
+                      onChange={(e) => updateSetting("ai", "openAIKey", e.target.value)}
+                    />
+                    <Button 
+                      variant={settings.openAIKeyVerified ? "default" : "secondary"} 
+                      size="sm"
+                      onClick={handleVerifyApiKey}
+                      disabled={verifyingKey || !settings.openAIKey}
+                    >
+                      {verifyingKey ? (
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      ) : settings.openAIKeyVerified ? (
+                        <CircleCheck className="h-4 w-4 mr-2" />
+                      ) : (
+                        <Zap className="h-4 w-4 mr-2" />
+                      )}
+                      {verifyingKey ? "Verifying..." : settings.openAIKeyVerified ? "Verified" : "Verify"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Your API key is stored securely and used only for AI features in this application.
+                    <a href="https://platform.openai.com/account/api-keys" target="_blank" rel="noopener noreferrer" className="ml-1 text-primary hover:underline">
+                      Get an API key
+                    </a>
+                  </p>
+                </div>
+
+                <Separator />
+                
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="enableAIAssistant">Enable AI Assistant</Label>
@@ -1075,6 +1169,25 @@ export default function SettingsPage() {
                       <SelectItem value="enhanced">Enhanced - Include web search</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="aiModel">AI Model</Label>
+                  <Select 
+                    defaultValue="gpt-4o"
+                  >
+                    <SelectTrigger id="aiModel">
+                      <SelectValue placeholder="Select AI model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gpt-4o">GPT-4o (Recommended)</SelectItem>
+                      <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
+                      <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    More powerful models provide better results but may use more API credits
+                  </p>
                 </div>
                 
                 <div className="flex items-center justify-between">

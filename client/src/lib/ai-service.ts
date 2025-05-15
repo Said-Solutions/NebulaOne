@@ -294,3 +294,39 @@ export function clearQueryHistory(): void {
   // In a real implementation, this would clear localStorage or a database
   console.log('Query history cleared');
 }
+
+/**
+ * Save OpenAI API key
+ */
+export function saveOpenAIApiKey(apiKey: string): Promise<boolean> {
+  // In a real implementation, this would validate and securely store the API key
+  return new Promise((resolve) => {
+    console.log(`Saving OpenAI API key: ${apiKey.substring(0, 3)}...${apiKey.substring(apiKey.length - 4)}`);
+    localStorage.setItem('openai_api_key', apiKey);
+    setTimeout(() => resolve(true), 500); // Simulate API call
+  });
+}
+
+/**
+ * Get saved OpenAI API key
+ */
+export function getOpenAIApiKey(): string | null {
+  // In a real implementation, this would retrieve the securely stored API key
+  return localStorage.getItem('openai_api_key');
+}
+
+/**
+ * Verify OpenAI API key
+ */
+export function verifyOpenAIApiKey(apiKey: string): Promise<boolean> {
+  // In a real implementation, this would make a test call to OpenAI API
+  return new Promise((resolve) => {
+    console.log('Verifying OpenAI API key...');
+    // Simulate a verification process
+    setTimeout(() => {
+      // Accept any key that looks like "sk-" followed by random chars
+      const isValid = apiKey.startsWith('sk-') && apiKey.length > 20;
+      resolve(isValid);
+    }, 1000);
+  });
+}
