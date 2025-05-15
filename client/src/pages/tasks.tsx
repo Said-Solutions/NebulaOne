@@ -521,7 +521,15 @@ const ActivityTimeline = ({ tasks }: { tasks: TaskType[] }) => {
 };
 
 // Project Board Component
-const ProjectBoard = ({ project, tasks }: { project: Project, tasks: TaskType[] }) => {
+const ProjectBoard = ({ 
+  project, 
+  tasks,
+  onAddTask
+}: { 
+  project: Project, 
+  tasks: TaskType[],
+  onAddTask?: () => void
+}) => {
   // Filter tasks for this project
   const projectTasks = tasks.filter(task => task.project === project.name);
   
@@ -567,10 +575,10 @@ const ProjectBoard = ({ project, tasks }: { project: Project, tasks: TaskType[] 
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>New task</DropdownMenuItem>
-              <DropdownMenuItem>New epic</DropdownMenuItem>
-              <DropdownMenuItem>New user story</DropdownMenuItem>
-              <DropdownMenuItem>New bug report</DropdownMenuItem>
+              <DropdownMenuItem onClick={onAddTask}>New task</DropdownMenuItem>
+              <DropdownMenuItem onClick={onAddTask}>New epic</DropdownMenuItem>
+              <DropdownMenuItem onClick={onAddTask}>New user story</DropdownMenuItem>
+              <DropdownMenuItem onClick={onAddTask}>New bug report</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -643,7 +651,12 @@ const ProjectBoard = ({ project, tasks }: { project: Project, tasks: TaskType[] 
             </div>
           )}
           
-          <Button variant="ghost" size="sm" className="justify-start w-full">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="justify-start w-full"
+            onClick={onAddTask}
+          >
             <Plus className="h-4 w-4 mr-2" /> Add issue
           </Button>
         </div>
@@ -793,11 +806,16 @@ export default function TasksPage() {
   ];
 
   // Handler for creating a new task
-  const handleCreateTask = () => {
-    toast({
-      title: "Create task",
-      description: "Task creation dialog would open here",
-    });
+  const handleCreateTask = (projectKey?: string) => {
+    if (projectKey) {
+      setSelectedProjectKey(projectKey);
+    }
+    setCreateTaskOpen(true);
+  };
+  
+  // Handler for creating a new project
+  const handleCreateProject = () => {
+    setCreateProjectOpen(true);
   };
 
   // Find current project if viewing a project
@@ -811,7 +829,18 @@ export default function TasksPage() {
   if (projectKey && location.includes('/board') && currentProject) {
     return (
       <div className="px-6 py-4 container max-w-7xl mx-auto">
-        <ProjectBoard project={currentProject} tasks={tasks as TaskType[]} />
+        {/* Create Task Dialog */}
+        <CreateTaskDialog 
+          open={createTaskOpen} 
+          onOpenChange={setCreateTaskOpen} 
+          preSelectedProject={projectKey}
+        />
+        
+        <ProjectBoard 
+          project={currentProject} 
+          tasks={tasks as TaskType[]} 
+          onAddTask={() => setCreateTaskOpen(true)}
+        />
       </div>
     );
   }
@@ -819,6 +848,19 @@ export default function TasksPage() {
   // If we're viewing the general tasks list
   return (
     <div className="px-6 py-4 container max-w-7xl mx-auto">
+      {/* Create Task Dialog */}
+      <CreateTaskDialog 
+        open={createTaskOpen} 
+        onOpenChange={setCreateTaskOpen} 
+        preSelectedProject={selectedProjectKey || undefined}
+      />
+      
+      {/* Create Project Dialog */}
+      <CreateProjectDialog 
+        open={createProjectOpen} 
+        onOpenChange={setCreateProjectOpen}
+      />
+      
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Tasks</h1>
@@ -837,7 +879,7 @@ export default function TasksPage() {
             <Activity className="h-4 w-4 mr-2" /> Timeline
           </Button>
           <Separator orientation="vertical" className="h-8" />
-          <Button onClick={handleCreateTask}>
+          <Button onClick={() => setCreateTaskOpen(true)}>
             <Plus className="h-4 w-4 mr-2" /> New Task
           </Button>
         </div>
@@ -967,7 +1009,7 @@ export default function TasksPage() {
           <TabsContent value="projects" className="space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Recent Projects</h2>
-              <Button variant="outline">
+              <Button variant="outline" onClick={() => setCreateProjectOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" /> Create Project
               </Button>
             </div>
