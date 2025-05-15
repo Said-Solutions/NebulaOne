@@ -59,6 +59,8 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
+import { CreateProjectDialog } from "@/components/tasks/CreateProjectDialog";
 
 // Interfaces
 interface Project {
@@ -694,6 +696,9 @@ export default function TasksPage() {
   const [activeTab, setActiveTab] = useState("assigned");
   const [viewMode, setViewMode] = useState<"list" | "board" | "calendar">("list");
   const [activeView, setActiveView] = useState<"tasks" | "workspace" | "timeline">("tasks");
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Extract project key from URL if viewing a project
