@@ -415,6 +415,146 @@ export default function SettingsPage() {
               </Button>
             </CardFooter>
           </Card>
+          
+          {/* Subscription Management Card (moved from separate tab) */}
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Subscription Management</CardTitle>
+              <CardDescription>
+                Manage your NebulaOne subscription and billing information.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-medium">Current Plan</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Your current subscription details and status.
+                  </p>
+                </div>
+                
+                <div className="border rounded-lg p-5">
+                  {user?.stripeSubscriptionId ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className="bg-primary/20 p-1.5 rounded-full">
+                            <BadgeCheck className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-semibold">{user?.subscriptionPlan || "Premium Plan"}</h4>
+                            <p className="text-xs text-muted-foreground">All features unlocked</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="px-2.5 py-0.5 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                            Active
+                          </span>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Since {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', {month: 'short', year: 'numeric'}) : 'signup'}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-muted/50 rounded-lg p-4 grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Billing Cycle</p>
+                          <p className="font-medium">Monthly</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Next Billing Date</p>
+                          <p className="font-medium">
+                            {user?.subscriptionExpiry 
+                              ? new Date(user.subscriptionExpiry).toLocaleDateString() 
+                              : "Not available"}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 pt-2">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => navigate("/subscribe?manage=true")}
+                          className="flex-1"
+                        >
+                          <CreditCard className="h-4 w-4 mr-1.5" />
+                          Update Payment
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="flex-1 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          Cancel Subscription
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <h4 className="text-lg font-semibold">Free Plan</h4>
+                        <span className="px-2.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
+                          Limited Access
+                        </span>
+                      </div>
+                      
+                      <p className="text-sm text-muted-foreground">
+                        You're currently on the free plan with limited features. Upgrade to get full access to all NebulaOne capabilities.
+                      </p>
+                      
+                      <div className="space-y-2 pt-2">
+                        <div className="bg-gradient-to-r from-primary to-purple-600 p-0.5 rounded-lg">
+                          <Button 
+                            onClick={() => navigate("/subscribe")}
+                            className="w-full bg-white hover:bg-transparent hover:text-white dark:bg-gray-900 dark:hover:bg-transparent"
+                          >
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            Upgrade to Premium
+                          </Button>
+                        </div>
+                        <p className="text-xs text-center text-muted-foreground">
+                          Cancel anytime. No hidden fees.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-medium">Premium Features</h3>
+                  <p className="text-sm text-muted-foreground">
+                    What's included in the premium subscription.
+                  </p>
+                </div>
+                
+                <div className="grid gap-3">
+                  {[
+                    "Unlimited workspace storage",
+                    "Advanced AI features and integrations",
+                    "Priority customer support",
+                    "Custom branding options",
+                    "Advanced analytics and reporting",
+                    "Team collaboration tools"
+                  ].map((feature, i) => (
+                    <div key={i} className="flex items-center space-x-2">
+                      <Check className="h-4 w-4 text-primary" />
+                      <span className="text-sm">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+            
+            <CardFooter className="flex justify-between">
+              <Button variant="ghost" onClick={() => navigate("/subscribe")}>
+                View Billing History
+              </Button>
+              <Button variant="outline" onClick={() => window.open("mailto:support@nebulaone.app")}>
+                Contact Support
+              </Button>
+            </CardFooter>
+          </Card>
         </TabsContent>
         
         {/* Appearance Settings Tab */}
@@ -1373,9 +1513,6 @@ export default function SettingsPage() {
             </CardFooter>
           </Card>
         </TabsContent>
-
-        {/* Subscription Tab */}
-
       </Tabs>
     </div>
   );
