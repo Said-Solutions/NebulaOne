@@ -114,6 +114,7 @@ export class MemStorage implements IStorage {
       id: nanoid(),
       type: 'task',
       createdAt: new Date().toISOString(),
+      itemId: id,
       data: newTask
     };
     this.timeline.set(timelineItem.id, timelineItem);
@@ -161,6 +162,7 @@ export class MemStorage implements IStorage {
       id: nanoid(),
       type: 'chat',
       createdAt: new Date().toISOString(),
+      itemId: id,
       data: newChat
     };
     this.timeline.set(timelineItem.id, timelineItem);
@@ -212,6 +214,7 @@ export class MemStorage implements IStorage {
       id: nanoid(),
       type: 'document',
       createdAt: new Date().toISOString(),
+      itemId: id,
       data: newDocument
     };
     this.timeline.set(timelineItem.id, timelineItem);
@@ -259,6 +262,7 @@ export class MemStorage implements IStorage {
       id: nanoid(),
       type: 'meeting',
       createdAt: new Date().toISOString(),
+      itemId: id,
       data: newMeeting
     };
     this.timeline.set(timelineItem.id, timelineItem);
@@ -285,6 +289,7 @@ export class MemStorage implements IStorage {
       id: nanoid(),
       type: 'email',
       createdAt: new Date().toISOString(),
+      itemId: id,
       data: newEmail
     };
     this.timeline.set(timelineItem.id, timelineItem);
@@ -294,7 +299,6 @@ export class MemStorage implements IStorage {
 }
 
 // Import the database storage implementation
-// Import storage implementations
 import { DatabaseStorage } from './database-storage';
 
 // Use either MemStorage or DatabaseStorage based on environment
@@ -302,6 +306,3 @@ const useDatabase = process.env.DATABASE_URL ? true : false;
 
 // Export the appropriate storage implementation
 export const storage = useDatabase ? new DatabaseStorage() : new MemStorage();
-
-// To use database storage, uncomment this line:
-// export const storage = new DatabaseStorage();

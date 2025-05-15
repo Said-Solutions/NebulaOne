@@ -1,18 +1,11 @@
-import { nanoid } from 'nanoid';
-import { db } from './db';
-import { eq, and } from 'drizzle-orm';
-import * as schema from '../shared/schema';
 import { 
-  User, 
-  TaskType, 
-  ChatThreadType, 
-  DocumentType,
-  MeetingType,
-  EmailType,
-  TimelineItemType,
-  Message
-} from '../shared/schema';
-import { IStorage } from './storage';
+  User, TaskType, ChatThreadType, DocumentType, MeetingType, EmailType, TimelineItemType, 
+  users, tasks, chats, messages, documents, documentCollaborators, meetings, meetingParticipants, emails, timeline 
+} from "@shared/schema";
+import { IStorage } from "./storage";
+import { db } from "./db";
+import { eq, desc } from "drizzle-orm";
+import { nanoid } from "nanoid";
 
 /**
  * Helper function to convert database types to interface types
@@ -20,7 +13,7 @@ import { IStorage } from './storage';
  * null/undefined handling than our TypeScript interfaces
  */
 const fixType = <T>(data: any): T => {
-  return data as T;
+  return JSON.parse(JSON.stringify(data)) as T;
 };
 
 /**
@@ -32,18 +25,11 @@ export class DatabaseStorage implements IStorage {
    */
   async getUser(id: string): Promise<User | undefined> {
     try {
-      const [user] = await db.select().from(schema.users).where(eq(schema.users.id, id));
-      if (!user) return undefined;
-      return {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        initials: user.initials,
-        avatar: user.avatar,
-        createdAt: user.createdAt
-      };
+      const result = await db.select().from(users).where(eq(users.id, id));
+      if (result.length === 0) return undefined;
+      return fixType<User>(result[0]);
     } catch (error) {
-      console.error('Error getting user by ID:', error);
+      console.error("Failed to get user by ID:", error);
       return undefined;
     }
   }
@@ -53,18 +39,11 @@ export class DatabaseStorage implements IStorage {
    */
   async getUserByUsername(username: string): Promise<User | undefined> {
     try {
-      const [user] = await db.select().from(schema.users).where(eq(schema.users.username, username));
-      if (!user) return undefined;
-      return {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        initials: user.initials,
-        avatar: user.avatar,
-        createdAt: user.createdAt
-      };
+      const result = await db.select().from(users).where(eq(users.username, username));
+      if (result.length === 0) return undefined;
+      return fixType<User>(result[0]);
     } catch (error) {
-      console.error('Error getting user by username:', error);
+      console.error("Failed to get user by username:", error);
       return undefined;
     }
   }
@@ -75,24 +54,11 @@ export class DatabaseStorage implements IStorage {
   async createUser(userData: Omit<User, "id">): Promise<User> {
     try {
       const id = nanoid();
-      const [user] = await db.insert(schema.users).values({
-        id,
-        username: userData.username,
-        name: userData.name,
-        initials: userData.initials,
-        avatar: userData.avatar || null
-      }).returning();
-      
-      return {
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        initials: user.initials,
-        avatar: user.avatar,
-        createdAt: user.createdAt
-      };
+      const newUser = { ...userData, id };
+      const result = await db.insert(users).values(newUser).returning();
+      return fixType<User>(result[0]);
     } catch (error) {
-      console.error('Error creating user:', error);
+      console.error("Failed to create user:", error);
       throw error;
     }
   }
@@ -102,25 +68,20 @@ export class DatabaseStorage implements IStorage {
    */
   async getTimelineItems(): Promise<TimelineItemType[]> {
     try {
-      const timelineItems = await db.select().from(schema.timeline);
-      const result: TimelineItemType[] = [];
+      // Get timeline items sorted by creation date in descending order
+      const timelineItems = await db.select().from(timeline).orderBy(desc(timeline.createdAt));
       
-      for (const item of timelineItems) {
-        const itemData = await this.getTimelineItemData(item.type as any, item.itemId);
-        if (itemData) {
-          result.push({
-            id: item.id,
-            type: item.type as any,
-            itemId: item.itemId,
-            createdAt: item.createdAt,
-            data: itemData
-          });
-        }
-      }
+      // Populate data for each item based on its type
+      const itemsWithData = await Promise.all(
+        timelineItems.map(async (item) => {
+          const data = await this.getTimelineItemData(item.type, item.itemId);
+          return { ...item, data } as TimelineItemType;
+        })
+      );
       
-      return result;
+      return fixType<TimelineItemType[]>(itemsWithData);
     } catch (error) {
-      console.error('Error getting timeline items:', error);
+      console.error("Failed to get timeline items:", error);
       return [];
     }
   }
@@ -130,22 +91,22 @@ export class DatabaseStorage implements IStorage {
    */
   private async getTimelineItemData(type: string, itemId: string): Promise<any> {
     try {
-      switch(type) {
-        case 'task':
-          return await this.getTask(itemId);
-        case 'chat':
-          return await this.getChat(itemId);
-        case 'document':
-          return await this.getDocument(itemId);
-        case 'meeting':
-          return await this.getMeeting(itemId);
-        case 'email':
-          return await this.getEmail(itemId);
+      switch (type) {
+        case 'task': 
+          return (await this.getTask(itemId)) || null;
+        case 'chat': 
+          return (await this.getChat(itemId)) || null;
+        case 'document': 
+          return (await this.getDocument(itemId)) || null;
+        case 'meeting': 
+          return (await this.getMeeting(itemId)) || null;
+        case 'email': 
+          return (await this.getEmail(itemId)) || null;
         default:
           return null;
       }
     } catch (error) {
-      console.error(`Error getting timeline item data for ${type}:${itemId}:`, error);
+      console.error(`Failed to get data for ${type} with ID ${itemId}:`, error);
       return null;
     }
   }
@@ -155,21 +116,15 @@ export class DatabaseStorage implements IStorage {
    */
   async getTimelineItem(id: string): Promise<TimelineItemType | undefined> {
     try {
-      const [item] = await db.select().from(schema.timeline).where(eq(schema.timeline.id, id));
-      if (!item) return undefined;
+      const result = await db.select().from(timeline).where(eq(timeline.id, id));
+      if (result.length === 0) return undefined;
       
-      const itemData = await this.getTimelineItemData(item.type as any, item.itemId);
-      if (!itemData) return undefined;
+      const item = result[0];
+      const data = await this.getTimelineItemData(item.type, item.itemId);
       
-      return {
-        id: item.id,
-        type: item.type as any,
-        itemId: item.itemId,
-        createdAt: item.createdAt,
-        data: itemData
-      };
+      return fixType<TimelineItemType>({ ...item, data });
     } catch (error) {
-      console.error('Error getting timeline item:', error);
+      console.error("Failed to get timeline item:", error);
       return undefined;
     }
   }
@@ -180,27 +135,11 @@ export class DatabaseStorage implements IStorage {
   async addTimelineItem(item: Omit<TimelineItemType, "id">): Promise<TimelineItemType> {
     try {
       const id = nanoid();
-      
-      // Insert the timeline item
-      const [timelineItem] = await db.insert(schema.timeline).values({
-        id,
-        type: item.type,
-        itemId: item.itemId,
-        createdAt: new Date()
-      }).returning();
-      
-      // Get the item data
-      const itemData = await this.getTimelineItemData(timelineItem.type as any, timelineItem.itemId);
-      
-      return {
-        id: timelineItem.id,
-        type: timelineItem.type as any,
-        createdAt: timelineItem.createdAt,
-        itemId: timelineItem.itemId,
-        data: itemData
-      };
+      const newItem = { ...item, id };
+      const result = await db.insert(timeline).values(newItem).returning();
+      return fixType<TimelineItemType>(result[0]);
     } catch (error) {
-      console.error('Error adding timeline item:', error);
+      console.error("Failed to add timeline item:", error);
       throw error;
     }
   }
@@ -210,32 +149,19 @@ export class DatabaseStorage implements IStorage {
    */
   async getTasks(): Promise<TaskType[]> {
     try {
-      const tasks = await db.select().from(schema.tasks);
-      const result: TaskType[] = [];
+      const tasksList = await db.select().from(tasks);
       
-      for (const task of tasks) {
-        const assignee = await this.getUser(task.assigneeId);
-        if (assignee) {
-          result.push({
-            id: task.id,
-            ticketId: task.ticketId,
-            title: task.title,
-            description: task.description,
-            status: task.status,
-            assigneeId: task.assigneeId,
-            assignee: assignee,
-            dueDate: task.dueDate,
-            project: task.project,
-            isCompleted: task.isCompleted,
-            createdAt: task.createdAt,
-            updatedAt: task.updatedAt
-          });
-        }
-      }
+      // For each task, fetch its assignee
+      const tasksWithAssignee = await Promise.all(
+        tasksList.map(async (task) => {
+          const assignee = await this.getUser(task.assigneeId);
+          return { ...task, assignee } as TaskType;
+        })
+      );
       
-      return result;
+      return fixType<TaskType[]>(tasksWithAssignee);
     } catch (error) {
-      console.error('Error getting tasks:', error);
+      console.error("Failed to get tasks:", error);
       return [];
     }
   }
@@ -245,28 +171,15 @@ export class DatabaseStorage implements IStorage {
    */
   async getTask(id: string): Promise<TaskType | undefined> {
     try {
-      const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
-      if (!task) return undefined;
+      const result = await db.select().from(tasks).where(eq(tasks.id, id));
+      if (result.length === 0) return undefined;
       
+      const task = result[0];
       const assignee = await this.getUser(task.assigneeId);
-      if (!assignee) return undefined;
       
-      return {
-        id: task.id,
-        ticketId: task.ticketId,
-        title: task.title,
-        description: task.description,
-        status: task.status,
-        assigneeId: task.assigneeId,
-        assignee: assignee,
-        dueDate: task.dueDate,
-        project: task.project,
-        isCompleted: task.isCompleted,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt
-      };
+      return fixType<TaskType>({ ...task, assignee: assignee! });
     } catch (error) {
-      console.error('Error getting task:', error);
+      console.error("Failed to get task:", error);
       return undefined;
     }
   }
@@ -276,48 +189,28 @@ export class DatabaseStorage implements IStorage {
    */
   async addTask(taskData: Omit<TaskType, "id">): Promise<TaskType> {
     try {
+      // Create a new ID for the task
       const id = nanoid();
       
-      // Insert the task
-      const [task] = await db.insert(schema.tasks).values({
-        id,
-        ticketId: taskData.ticketId,
-        title: taskData.title,
-        description: taskData.description,
-        status: taskData.status,
-        assigneeId: taskData.assigneeId,
-        dueDate: taskData.dueDate,
-        project: taskData.project,
-        isCompleted: taskData.isCompleted
-      }).returning();
+      // Extract the assignee from the task data to insert separately
+      const { assignee, ...taskWithoutAssignee } = taskData;
+      const newTask = { ...taskWithoutAssignee, id };
+      
+      // Insert task into database
+      const result = await db.insert(tasks).values(newTask).returning();
+      const insertedTask = result[0];
       
       // Add to timeline
-      await db.insert(schema.timeline).values({
-        id: nanoid(),
+      await this.addTimelineItem({
         type: 'task',
         itemId: id,
-        createdAt: new Date()
+        createdAt: new Date(),
       });
       
-      const assignee = await this.getUser(task.assigneeId);
-      if (!assignee) throw new Error('Task assignee not found');
-      
-      return {
-        id: task.id,
-        ticketId: task.ticketId,
-        title: task.title,
-        description: task.description,
-        status: task.status,
-        assigneeId: task.assigneeId,
-        assignee,
-        dueDate: task.dueDate,
-        project: task.project,
-        isCompleted: task.isCompleted,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt
-      };
+      // Return task with assignee info
+      return fixType<TaskType>({ ...insertedTask, assignee });
     } catch (error) {
-      console.error('Error adding task:', error);
+      console.error("Failed to add task:", error);
       throw error;
     }
   }
@@ -327,46 +220,26 @@ export class DatabaseStorage implements IStorage {
    */
   async updateTask(id: string, taskUpdate: Partial<TaskType>): Promise<TaskType | undefined> {
     try {
-      // Ensure task exists
+      // Get the existing task
       const existingTask = await this.getTask(id);
       if (!existingTask) return undefined;
       
-      // Prepare update values
-      const updateValues: any = {};
-      if (taskUpdate.title !== undefined) updateValues.title = taskUpdate.title;
-      if (taskUpdate.description !== undefined) updateValues.description = taskUpdate.description;
-      if (taskUpdate.status !== undefined) updateValues.status = taskUpdate.status;
-      if (taskUpdate.assigneeId !== undefined) updateValues.assigneeId = taskUpdate.assigneeId;
-      if (taskUpdate.dueDate !== undefined) updateValues.dueDate = taskUpdate.dueDate;
-      if (taskUpdate.project !== undefined) updateValues.project = taskUpdate.project;
-      if (taskUpdate.isCompleted !== undefined) updateValues.isCompleted = taskUpdate.isCompleted;
-      updateValues.updatedAt = new Date();
+      // Remove assignee from the update data as it's handled separately
+      const { assignee, ...updateData } = taskUpdate;
       
       // Update the task
-      const [updatedTask] = await db.update(schema.tasks)
-        .set(updateValues)
-        .where(eq(schema.tasks.id, id))
+      const result = await db
+        .update(tasks)
+        .set(updateData)
+        .where(eq(tasks.id, id))
         .returning();
       
-      const assignee = await this.getUser(updatedTask.assigneeId);
-      if (!assignee) throw new Error('Task assignee not found');
+      if (result.length === 0) return undefined;
       
-      return {
-        id: updatedTask.id,
-        ticketId: updatedTask.ticketId,
-        title: updatedTask.title,
-        description: updatedTask.description,
-        status: updatedTask.status,
-        assigneeId: updatedTask.assigneeId,
-        assignee,
-        dueDate: updatedTask.dueDate,
-        project: updatedTask.project,
-        isCompleted: updatedTask.isCompleted,
-        createdAt: updatedTask.createdAt,
-        updatedAt: updatedTask.updatedAt
-      };
+      // Get the updated task with assignee
+      return await this.getTask(id);
     } catch (error) {
-      console.error('Error updating task:', error);
+      console.error("Failed to update task:", error);
       return undefined;
     }
   }
@@ -376,27 +249,19 @@ export class DatabaseStorage implements IStorage {
    */
   async getChats(): Promise<ChatThreadType[]> {
     try {
-      const chats = await db.select().from(schema.chats);
-      const result: ChatThreadType[] = [];
+      const chatsList = await db.select().from(chats);
       
-      for (const chat of chats) {
-        // Get all messages for this chat
-        const messages = await this.getChatMessages(chat.id);
-        
-        result.push({
-          id: chat.id,
-          title: chat.title,
-          channel: chat.channel,
-          priority: chat.priority as any,
-          messages,
-          createdAt: chat.createdAt,
-          updatedAt: chat.updatedAt
-        });
-      }
+      // For each chat, fetch its messages
+      const chatsWithMessages = await Promise.all(
+        chatsList.map(async (chat) => {
+          const chatMessages = await this.getChatMessages(chat.id);
+          return { ...chat, messages: chatMessages } as ChatThreadType;
+        })
+      );
       
-      return result;
+      return fixType<ChatThreadType[]>(chatsWithMessages);
     } catch (error) {
-      console.error('Error getting chats:', error);
+      console.error("Failed to get chats:", error);
       return [];
     }
   }
@@ -404,32 +269,24 @@ export class DatabaseStorage implements IStorage {
   /**
    * Get all messages for a chat thread
    */
-  private async getChatMessages(chatId: string): Promise<Message[]> {
+  private async getChatMessages(chatId: string): Promise<any[]> {
     try {
-      const messages = await db.select()
-        .from(schema.messages)
-        .where(eq(schema.messages.chatId, chatId));
+      const messagesList = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.chatId, chatId));
       
-      const result: Message[] = [];
-      for (const message of messages) {
-        const author = await this.getUser(message.authorId);
-        if (author) {
-          result.push({
-            id: message.id,
-            chatId: message.chatId,
-            authorId: message.authorId,
-            author,
-            content: message.content,
-            time: message.time,
-            codeSnippet: message.codeSnippet,
-            createdAt: message.createdAt
-          });
-        }
-      }
+      // For each message, fetch its author
+      const messagesWithAuthors = await Promise.all(
+        messagesList.map(async (message) => {
+          const author = await this.getUser(message.authorId);
+          return { ...message, author };
+        })
+      );
       
-      return result;
+      return messagesWithAuthors;
     } catch (error) {
-      console.error(`Error getting messages for chat ${chatId}:`, error);
+      console.error(`Failed to get messages for chat ${chatId}:`, error);
       return [];
     }
   }
@@ -439,23 +296,15 @@ export class DatabaseStorage implements IStorage {
    */
   async getChat(id: string): Promise<ChatThreadType | undefined> {
     try {
-      const [chat] = await db.select().from(schema.chats).where(eq(schema.chats.id, id));
-      if (!chat) return undefined;
+      const result = await db.select().from(chats).where(eq(chats.id, id));
+      if (result.length === 0) return undefined;
       
-      // Get all messages for this chat
-      const messages = await this.getChatMessages(chat.id);
+      const chat = result[0];
+      const chatMessages = await this.getChatMessages(id);
       
-      return {
-        id: chat.id,
-        title: chat.title,
-        channel: chat.channel,
-        priority: chat.priority as any,
-        messages,
-        createdAt: chat.createdAt,
-        updatedAt: chat.updatedAt
-      };
+      return fixType<ChatThreadType>({ ...chat, messages: chatMessages });
     } catch (error) {
-      console.error('Error getting chat:', error);
+      console.error("Failed to get chat:", error);
       return undefined;
     }
   }
@@ -465,46 +314,49 @@ export class DatabaseStorage implements IStorage {
    */
   async addChat(chatData: Omit<ChatThreadType, "id">): Promise<ChatThreadType> {
     try {
+      // Create a new ID for the chat
       const id = nanoid();
       
-      // Insert the chat
-      const [chat] = await db.insert(schema.chats).values({
-        id,
-        title: chatData.title,
-        channel: chatData.channel,
-        priority: chatData.priority || null
-      }).returning();
+      // Extract the messages from the chat data to insert separately
+      const { messages: chatMessages, ...chatWithoutMessages } = chatData;
+      const newChat = { ...chatWithoutMessages, id };
       
-      // Add to timeline
-      await db.insert(schema.timeline).values({
-        id: nanoid(),
-        type: 'chat',
-        itemId: id,
-        createdAt: new Date()
-      });
+      // Insert chat into database
+      const result = await db.insert(chats).values(newChat).returning();
+      const insertedChat = result[0];
       
-      // Handle messages if included
-      const messages: Message[] = [];
-      if (chatData.messages && chatData.messages.length > 0) {
-        for (const message of chatData.messages) {
-          const addedMessage = await this.addMessage(id, message);
-          if (addedMessage) {
-            messages.push(addedMessage as Message);
-          }
+      // Insert messages if any
+      const insertedMessages = [];
+      if (chatMessages && chatMessages.length > 0) {
+        for (const message of chatMessages) {
+          const messageId = nanoid();
+          const newMessage = { 
+            ...message, 
+            id: messageId,
+            chatId: id,
+          };
+          
+          await db.insert(messages).values(newMessage);
+          insertedMessages.push({
+            ...newMessage,
+            author: message.author
+          });
         }
       }
       
-      return {
-        id: chat.id,
-        title: chat.title,
-        channel: chat.channel,
-        priority: chat.priority as any,
-        messages,
-        createdAt: chat.createdAt,
-        updatedAt: chat.updatedAt
-      };
+      // Add to timeline
+      await this.addTimelineItem({
+        type: 'chat',
+        itemId: id,
+        createdAt: new Date(),
+      });
+      
+      return fixType<ChatThreadType>({ 
+        ...insertedChat, 
+        messages: insertedMessages 
+      });
     } catch (error) {
-      console.error('Error adding chat:', error);
+      console.error("Failed to add chat:", error);
       throw error;
     }
   }
@@ -514,38 +366,19 @@ export class DatabaseStorage implements IStorage {
    */
   async addMessage(chatId: string, message: any): Promise<any> {
     try {
+      // Create a new ID for the message
       const id = nanoid();
+      const newMessage = { ...message, id, chatId };
       
-      // Insert the message
-      const [newMessage] = await db.insert(schema.messages).values({
-        id,
-        chatId,
-        authorId: message.authorId,
-        content: message.content,
-        time: message.time,
-        codeSnippet: message.codeSnippet || null
-      }).returning();
+      // Extract author to handle separately
+      const { author, ...messageData } = newMessage;
       
-      // Update chat's updatedAt
-      await db.update(schema.chats)
-        .set({ updatedAt: new Date() })
-        .where(eq(schema.chats.id, chatId));
+      // Insert message
+      const result = await db.insert(messages).values(messageData).returning();
       
-      const author = await this.getUser(newMessage.authorId);
-      if (!author) throw new Error('Message author not found');
-      
-      return {
-        id: newMessage.id,
-        chatId: newMessage.chatId,
-        authorId: newMessage.authorId,
-        author,
-        content: newMessage.content,
-        time: newMessage.time,
-        codeSnippet: newMessage.codeSnippet,
-        createdAt: newMessage.createdAt
-      };
+      return { ...result[0], author };
     } catch (error) {
-      console.error('Error adding message:', error);
+      console.error("Failed to add message:", error);
       throw error;
     }
   }
@@ -555,27 +388,19 @@ export class DatabaseStorage implements IStorage {
    */
   async getDocuments(): Promise<DocumentType[]> {
     try {
-      const documents = await db.select().from(schema.documents);
-      const result: DocumentType[] = [];
+      const documentsList = await db.select().from(documents);
       
-      for (const doc of documents) {
-        // Get collaborators
-        const collaborators = await this.getDocumentCollaborators(doc.id);
-        
-        result.push({
-          id: doc.id,
-          title: doc.title,
-          content: doc.content,
-          lastEdited: doc.lastEdited,
-          collaborators,
-          createdAt: doc.createdAt,
-          updatedAt: doc.updatedAt
-        });
-      }
+      // For each document, fetch its collaborators
+      const documentsWithCollaborators = await Promise.all(
+        documentsList.map(async (document) => {
+          const collaborators = await this.getDocumentCollaborators(document.id);
+          return { ...document, collaborators } as DocumentType;
+        })
+      );
       
-      return result;
+      return fixType<DocumentType[]>(documentsWithCollaborators);
     } catch (error) {
-      console.error('Error getting documents:', error);
+      console.error("Failed to get documents:", error);
       return [];
     }
   }
@@ -585,21 +410,21 @@ export class DatabaseStorage implements IStorage {
    */
   private async getDocumentCollaborators(documentId: string): Promise<User[]> {
     try {
-      const entries = await db.select()
-        .from(schema.documentCollaborators)
-        .where(eq(schema.documentCollaborators.documentId, documentId));
+      const collaboratorEntries = await db
+        .select()
+        .from(documentCollaborators)
+        .where(eq(documentCollaborators.documentId, documentId));
       
-      const result: User[] = [];
-      for (const entry of entries) {
-        const user = await this.getUser(entry.userId);
-        if (user) {
-          result.push(user);
-        }
-      }
+      const collaborators = await Promise.all(
+        collaboratorEntries.map(async (entry) => {
+          const user = await this.getUser(entry.userId);
+          return user!;
+        })
+      );
       
-      return result;
+      return collaborators.filter(Boolean) as User[];
     } catch (error) {
-      console.error(`Error getting collaborators for document ${documentId}:`, error);
+      console.error(`Failed to get collaborators for document ${documentId}:`, error);
       return [];
     }
   }
@@ -609,23 +434,15 @@ export class DatabaseStorage implements IStorage {
    */
   async getDocument(id: string): Promise<DocumentType | undefined> {
     try {
-      const [document] = await db.select().from(schema.documents).where(eq(schema.documents.id, id));
-      if (!document) return undefined;
+      const result = await db.select().from(documents).where(eq(documents.id, id));
+      if (result.length === 0) return undefined;
       
-      // Get collaborators
-      const collaborators = await this.getDocumentCollaborators(document.id);
+      const document = result[0];
+      const collaborators = await this.getDocumentCollaborators(id);
       
-      return {
-        id: document.id,
-        title: document.title,
-        content: document.content,
-        lastEdited: document.lastEdited,
-        collaborators,
-        createdAt: document.createdAt,
-        updatedAt: document.updatedAt
-      };
+      return fixType<DocumentType>({ ...document, collaborators });
     } catch (error) {
-      console.error('Error getting document:', error);
+      console.error("Failed to get document:", error);
       return undefined;
     }
   }
@@ -635,47 +452,37 @@ export class DatabaseStorage implements IStorage {
    */
   async addDocument(documentData: Omit<DocumentType, "id">): Promise<DocumentType> {
     try {
+      // Create a new ID for the document
       const id = nanoid();
       
-      // Insert the document
-      const [document] = await db.insert(schema.documents).values({
-        id,
-        title: documentData.title,
-        content: documentData.content,
-        lastEdited: documentData.lastEdited
-      }).returning();
+      // Extract the collaborators from the document data to insert separately
+      const { collaborators, ...documentWithoutCollaborators } = documentData;
+      const newDocument = { ...documentWithoutCollaborators, id };
       
-      // Add to timeline
-      await db.insert(schema.timeline).values({
-        id: nanoid(),
-        type: 'document',
-        itemId: id,
-        createdAt: new Date()
-      });
+      // Insert document into database
+      const result = await db.insert(documents).values(newDocument).returning();
+      const insertedDocument = result[0];
       
-      // Add collaborators if included
-      const collaborators: User[] = [];
-      if (documentData.collaborators && documentData.collaborators.length > 0) {
-        for (const collaborator of documentData.collaborators) {
-          await db.insert(schema.documentCollaborators).values({
+      // Insert collaborator relationships if any
+      if (collaborators && collaborators.length > 0) {
+        for (const collaborator of collaborators) {
+          await db.insert(documentCollaborators).values({
             documentId: id,
-            userId: collaborator.id
+            userId: collaborator.id,
           });
-          collaborators.push(collaborator);
         }
       }
       
-      return {
-        id: document.id,
-        title: document.title,
-        content: document.content,
-        lastEdited: document.lastEdited,
-        collaborators,
-        createdAt: document.createdAt,
-        updatedAt: document.updatedAt
-      };
+      // Add to timeline
+      await this.addTimelineItem({
+        type: 'document',
+        itemId: id,
+        createdAt: new Date(),
+      });
+      
+      return fixType<DocumentType>({ ...insertedDocument, collaborators });
     } catch (error) {
-      console.error('Error adding document:', error);
+      console.error("Failed to add document:", error);
       throw error;
     }
   }
@@ -685,52 +492,42 @@ export class DatabaseStorage implements IStorage {
    */
   async updateDocument(id: string, documentUpdate: Partial<DocumentType>): Promise<DocumentType | undefined> {
     try {
-      // Ensure document exists
+      // Get the existing document
       const existingDocument = await this.getDocument(id);
       if (!existingDocument) return undefined;
       
-      // Prepare update values
-      const updateValues: any = {};
-      if (documentUpdate.title !== undefined) updateValues.title = documentUpdate.title;
-      if (documentUpdate.content !== undefined) updateValues.content = documentUpdate.content;
-      if (documentUpdate.lastEdited !== undefined) updateValues.lastEdited = documentUpdate.lastEdited;
-      updateValues.updatedAt = new Date();
+      // Remove collaborators from the update data as it's handled separately
+      const { collaborators, ...updateData } = documentUpdate;
       
       // Update the document
-      const [updatedDocument] = await db.update(schema.documents)
-        .set(updateValues)
-        .where(eq(schema.documents.id, id))
+      const result = await db
+        .update(documents)
+        .set(updateData)
+        .where(eq(documents.id, id))
         .returning();
       
-      // Update collaborators if needed
-      let collaborators = existingDocument.collaborators;
-      if (documentUpdate.collaborators) {
-        // Remove all existing collaborators
-        await db.delete(schema.documentCollaborators)
-          .where(eq(schema.documentCollaborators.documentId, id));
+      if (result.length === 0) return undefined;
+      
+      // Handle collaborators update if provided
+      if (collaborators) {
+        // Remove existing collaborator relationships
+        await db
+          .delete(documentCollaborators)
+          .where(eq(documentCollaborators.documentId, id));
         
-        // Add new collaborators
-        collaborators = [];
-        for (const collaborator of documentUpdate.collaborators) {
-          await db.insert(schema.documentCollaborators).values({
+        // Insert new collaborator relationships
+        for (const collaborator of collaborators) {
+          await db.insert(documentCollaborators).values({
             documentId: id,
-            userId: collaborator.id
+            userId: collaborator.id,
           });
-          collaborators.push(collaborator);
         }
       }
       
-      return {
-        id: updatedDocument.id,
-        title: updatedDocument.title,
-        content: updatedDocument.content,
-        lastEdited: updatedDocument.lastEdited,
-        collaborators,
-        createdAt: updatedDocument.createdAt,
-        updatedAt: updatedDocument.updatedAt
-      };
+      // Get the updated document with collaborators
+      return await this.getDocument(id);
     } catch (error) {
-      console.error('Error updating document:', error);
+      console.error("Failed to update document:", error);
       return undefined;
     }
   }
@@ -740,30 +537,19 @@ export class DatabaseStorage implements IStorage {
    */
   async getMeetings(): Promise<MeetingType[]> {
     try {
-      const meetings = await db.select().from(schema.meetings);
-      const result: MeetingType[] = [];
+      const meetingsList = await db.select().from(meetings);
       
-      for (const meeting of meetings) {
-        // Get participants
-        const participants = await this.getMeetingParticipants(meeting.id);
-        
-        result.push({
-          id: meeting.id,
-          title: meeting.title,
-          startTime: meeting.startTime,
-          endTime: meeting.endTime,
-          summary: meeting.summary,
-          summaryConfidence: meeting.summaryConfidence,
-          actionItems: meeting.actionItems,
-          recordingUrl: meeting.recordingUrl,
-          participants,
-          createdAt: meeting.createdAt
-        });
-      }
+      // For each meeting, fetch its participants
+      const meetingsWithParticipants = await Promise.all(
+        meetingsList.map(async (meeting) => {
+          const participants = await this.getMeetingParticipants(meeting.id);
+          return { ...meeting, participants } as MeetingType;
+        })
+      );
       
-      return result;
+      return fixType<MeetingType[]>(meetingsWithParticipants);
     } catch (error) {
-      console.error('Error getting meetings:', error);
+      console.error("Failed to get meetings:", error);
       return [];
     }
   }
@@ -773,21 +559,21 @@ export class DatabaseStorage implements IStorage {
    */
   private async getMeetingParticipants(meetingId: string): Promise<User[]> {
     try {
-      const entries = await db.select()
-        .from(schema.meetingParticipants)
-        .where(eq(schema.meetingParticipants.meetingId, meetingId));
+      const participantEntries = await db
+        .select()
+        .from(meetingParticipants)
+        .where(eq(meetingParticipants.meetingId, meetingId));
       
-      const result: User[] = [];
-      for (const entry of entries) {
-        const user = await this.getUser(entry.userId);
-        if (user) {
-          result.push(user);
-        }
-      }
+      const participants = await Promise.all(
+        participantEntries.map(async (entry) => {
+          const user = await this.getUser(entry.userId);
+          return user!;
+        })
+      );
       
-      return result;
+      return participants.filter(Boolean) as User[];
     } catch (error) {
-      console.error(`Error getting participants for meeting ${meetingId}:`, error);
+      console.error(`Failed to get participants for meeting ${meetingId}:`, error);
       return [];
     }
   }
@@ -797,26 +583,15 @@ export class DatabaseStorage implements IStorage {
    */
   async getMeeting(id: string): Promise<MeetingType | undefined> {
     try {
-      const [meeting] = await db.select().from(schema.meetings).where(eq(schema.meetings.id, id));
-      if (!meeting) return undefined;
+      const result = await db.select().from(meetings).where(eq(meetings.id, id));
+      if (result.length === 0) return undefined;
       
-      // Get participants
-      const participants = await this.getMeetingParticipants(meeting.id);
+      const meeting = result[0];
+      const participants = await this.getMeetingParticipants(id);
       
-      return {
-        id: meeting.id,
-        title: meeting.title,
-        startTime: meeting.startTime,
-        endTime: meeting.endTime,
-        summary: meeting.summary,
-        summaryConfidence: meeting.summaryConfidence,
-        actionItems: meeting.actionItems,
-        recordingUrl: meeting.recordingUrl,
-        participants,
-        createdAt: meeting.createdAt
-      };
+      return fixType<MeetingType>({ ...meeting, participants });
     } catch (error) {
-      console.error('Error getting meeting:', error);
+      console.error("Failed to get meeting:", error);
       return undefined;
     }
   }
@@ -826,54 +601,37 @@ export class DatabaseStorage implements IStorage {
    */
   async addMeeting(meetingData: MeetingType): Promise<MeetingType> {
     try {
+      // Create a new ID for the meeting
       const id = nanoid();
       
-      // Insert the meeting
-      const [meeting] = await db.insert(schema.meetings).values({
-        id: meetingData.id || id,
-        title: meetingData.title,
-        startTime: meetingData.startTime,
-        endTime: meetingData.endTime,
-        summary: meetingData.summary,
-        summaryConfidence: meetingData.summaryConfidence,
-        actionItems: meetingData.actionItems,
-        recordingUrl: meetingData.recordingUrl
-      }).returning();
+      // Extract the participants from the meeting data to insert separately
+      const { participants, ...meetingWithoutParticipants } = meetingData;
+      const newMeeting = { ...meetingWithoutParticipants, id };
       
-      // Add to timeline
-      await db.insert(schema.timeline).values({
-        id: nanoid(),
-        type: 'meeting',
-        itemId: meeting.id,
-        createdAt: new Date()
-      });
+      // Insert meeting into database
+      const result = await db.insert(meetings).values(newMeeting).returning();
+      const insertedMeeting = result[0];
       
-      // Add participants if included
-      const participants: User[] = [];
-      if (meetingData.participants && meetingData.participants.length > 0) {
-        for (const participant of meetingData.participants) {
-          await db.insert(schema.meetingParticipants).values({
-            meetingId: meeting.id,
-            userId: participant.id
+      // Insert participant relationships if any
+      if (participants && participants.length > 0) {
+        for (const participant of participants) {
+          await db.insert(meetingParticipants).values({
+            meetingId: id,
+            userId: participant.id,
           });
-          participants.push(participant);
         }
       }
       
-      return {
-        id: meeting.id,
-        title: meeting.title,
-        startTime: meeting.startTime,
-        endTime: meeting.endTime,
-        summary: meeting.summary,
-        summaryConfidence: meeting.summaryConfidence,
-        actionItems: meeting.actionItems,
-        recordingUrl: meeting.recordingUrl,
-        participants,
-        createdAt: meeting.createdAt
-      };
+      // Add to timeline
+      await this.addTimelineItem({
+        type: 'meeting',
+        itemId: id,
+        createdAt: new Date(),
+      });
+      
+      return fixType<MeetingType>({ ...insertedMeeting, participants });
     } catch (error) {
-      console.error('Error adding meeting:', error);
+      console.error("Failed to add meeting:", error);
       throw error;
     }
   }
@@ -883,30 +641,19 @@ export class DatabaseStorage implements IStorage {
    */
   async getEmails(): Promise<EmailType[]> {
     try {
-      const emails = await db.select().from(schema.emails);
-      const result: EmailType[] = [];
+      const emailsList = await db.select().from(emails);
       
-      for (const email of emails) {
-        const sender = await this.getUser(email.senderId);
-        if (sender) {
-          result.push({
-            id: email.id,
-            subject: email.subject,
-            senderId: email.senderId,
-            sender,
-            recipient: email.recipient,
-            time: email.time,
-            paragraphs: email.paragraphs,
-            summary: email.summary,
-            summaryConfidence: email.summaryConfidence,
-            createdAt: email.createdAt
-          });
-        }
-      }
+      // For each email, fetch its sender
+      const emailsWithSenders = await Promise.all(
+        emailsList.map(async (email) => {
+          const sender = await this.getUser(email.senderId);
+          return { ...email, sender: sender! } as EmailType;
+        })
+      );
       
-      return result;
+      return fixType<EmailType[]>(emailsWithSenders);
     } catch (error) {
-      console.error('Error getting emails:', error);
+      console.error("Failed to get emails:", error);
       return [];
     }
   }
@@ -916,26 +663,15 @@ export class DatabaseStorage implements IStorage {
    */
   async getEmail(id: string): Promise<EmailType | undefined> {
     try {
-      const [email] = await db.select().from(schema.emails).where(eq(schema.emails.id, id));
-      if (!email) return undefined;
+      const result = await db.select().from(emails).where(eq(emails.id, id));
+      if (result.length === 0) return undefined;
       
+      const email = result[0];
       const sender = await this.getUser(email.senderId);
-      if (!sender) return undefined;
       
-      return {
-        id: email.id,
-        subject: email.subject,
-        senderId: email.senderId,
-        sender,
-        recipient: email.recipient,
-        time: email.time,
-        paragraphs: email.paragraphs,
-        summary: email.summary,
-        summaryConfidence: email.summaryConfidence,
-        createdAt: email.createdAt
-      };
+      return fixType<EmailType>({ ...email, sender: sender! });
     } catch (error) {
-      console.error('Error getting email:', error);
+      console.error("Failed to get email:", error);
       return undefined;
     }
   }
@@ -945,45 +681,27 @@ export class DatabaseStorage implements IStorage {
    */
   async addEmail(emailData: Omit<EmailType, "id">): Promise<EmailType> {
     try {
+      // Create a new ID for the email
       const id = nanoid();
       
-      // Insert the email
-      const [email] = await db.insert(schema.emails).values({
-        id,
-        subject: emailData.subject,
-        senderId: emailData.senderId,
-        recipient: emailData.recipient,
-        time: emailData.time,
-        paragraphs: emailData.paragraphs,
-        summary: emailData.summary,
-        summaryConfidence: emailData.summaryConfidence
-      }).returning();
+      // Extract the sender from the email data to insert separately
+      const { sender, ...emailWithoutSender } = emailData;
+      const newEmail = { ...emailWithoutSender, id };
+      
+      // Insert email into database
+      const result = await db.insert(emails).values(newEmail).returning();
+      const insertedEmail = result[0];
       
       // Add to timeline
-      await db.insert(schema.timeline).values({
-        id: nanoid(),
+      await this.addTimelineItem({
         type: 'email',
         itemId: id,
-        createdAt: new Date()
+        createdAt: new Date(),
       });
       
-      const sender = await this.getUser(email.senderId);
-      if (!sender) throw new Error('Email sender not found');
-      
-      return {
-        id: email.id,
-        subject: email.subject,
-        senderId: email.senderId,
-        sender,
-        recipient: email.recipient,
-        time: email.time,
-        paragraphs: email.paragraphs,
-        summary: email.summary,
-        summaryConfidence: email.summaryConfidence,
-        createdAt: email.createdAt
-      };
+      return fixType<EmailType>({ ...insertedEmail, sender });
     } catch (error) {
-      console.error('Error adding email:', error);
+      console.error("Failed to add email:", error);
       throw error;
     }
   }
