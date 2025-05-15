@@ -9,6 +9,11 @@ import { users } from "@shared/schema";
 import { setupAuth } from "./auth";
 import Stripe from "stripe";
 
+// Type definition for Stripe Subscription with period_end
+type StripeSubscription = Stripe.Response<Stripe.Subscription> & {
+  current_period_end: number;
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize Stripe
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -292,7 +297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.json({
               subscriptionId: subscription.id,
               status: subscription.status,
-              currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+              currentPeriodEnd: new Date((subscription as any).current_period_end * 1000).toISOString(),
               clientSecret: null // No payment needed for existing active subscription
             });
           }
