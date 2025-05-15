@@ -197,11 +197,38 @@ const AdminSkipButton = ({ onSkip }: { onSkip: () => void }) => {
 };
 
 export default function SubscribePage() {
-  const { user } = useAuth();
+  const { user, logoutMutation } = useAuth();
   const [clientSecret, setClientSecret] = useState("");
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const { toast } = useToast();
   const [_, navigate] = useLocation();
+  
+  // Handle browser back button by logging out
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Show a confirmation dialog
+      e.preventDefault();
+      e.returnValue = '';
+      
+      // This is to ensure the dialog shows, but we'll handle actual
+      // logout in the popstate event
+      return '';
+    };
+    
+    const handlePopState = () => {
+      // When user navigates away (back button), log them out
+      logoutMutation.mutate();
+      navigate('/auth');
+    };
+    
+    // Add event listeners
+    window.addEventListener('popstate', handlePopState);
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [logoutMutation, navigate]);
   
   // Function to activate free trial for admin users
   const activateAdminAccess = async () => {
@@ -362,6 +389,37 @@ export default function SubscribePage() {
               
               {/* Admin Skip Button */}
               <AdminSkipButton onSkip={activateAdminAccess} />
+              
+              {/* Log out/Back button */}
+              <div className="mt-6 text-center">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-neutral-500">
+                      Back to Login
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Return to Login Page?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        You will be logged out and redirected to the login page. You can register or log in again from there.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction 
+                        onClick={() => {
+                          logoutMutation.mutate(undefined, {
+                            onSuccess: () => navigate('/auth')
+                          });
+                        }}
+                      >
+                        Log Out & Return
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </CardContent>
             <CardFooter className="flex-col items-start">
               <div className="flex items-center text-sm text-muted-foreground mb-2">
