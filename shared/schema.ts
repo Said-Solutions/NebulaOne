@@ -103,23 +103,29 @@ export interface User {
   username: string;
   name: string;
   initials: string;
-  avatar?: string;
+  avatar?: string | null;
+  createdAt?: Date;
 }
 
 export interface Message {
   id: string;
+  chatId: string;
+  authorId: string;
   author: User;
   content: string;
   time: string;
-  codeSnippet?: string;
+  codeSnippet?: string | null;
+  createdAt?: Date;
 }
 
 export interface ChatThreadType {
   id: string;
   title: string;
   channel: string;
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  priority?: 'low' | 'medium' | 'high' | 'urgent' | null;
   messages: Message[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface TaskType {
@@ -128,10 +134,13 @@ export interface TaskType {
   title: string;
   description: string;
   status: string;
+  assigneeId: string;
   assignee: User;
   dueDate: string;
   project: string;
   isCompleted: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface MeetingType {
@@ -144,32 +153,38 @@ export interface MeetingType {
   summaryConfidence: number; // 0-100
   actionItems: string[];
   recordingUrl: string;
+  createdAt?: Date;
 }
 
 export interface DocumentType {
   id: string;
   title: string;
+  content: string; // HTML content
   lastEdited: string;
   collaborators: User[];
-  content: string; // HTML content
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface EmailType {
   id: string;
   subject: string;
+  senderId: string;
   sender: User;
   recipient: string;
   time: string;
   paragraphs: string[];
   summary: string;
   summaryConfidence: number; // 0-100
+  createdAt?: Date;
 }
 
 export interface TimelineItemType {
   id: string;
   type: 'meeting' | 'task' | 'chat' | 'document' | 'email';
-  createdAt: string;
-  data: MeetingType | TaskType | ChatThreadType | DocumentType | EmailType;
+  itemId: string; // Reference to the specific item
+  createdAt: Date | string;
+  data?: MeetingType | TaskType | ChatThreadType | DocumentType | EmailType;
 }
 
 // Zod schemas for validation

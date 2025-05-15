@@ -1,789 +1,990 @@
 import { nanoid } from 'nanoid';
 import { db } from './db';
-import { eq, and, desc, SQL } from 'drizzle-orm';
-import { IStorage } from './storage';
-import {
-  users,
-  tasks,
-  chats,
-  messages,
-  documents,
-  documentCollaborators,
-  meetings,
-  meetingParticipants,
-  emails,
-  timeline,
-  User,
-  ChatThreadType,
-  TaskType,
+import { eq, and } from 'drizzle-orm';
+import * as schema from '../shared/schema';
+import { 
+  User, 
+  TaskType, 
+  ChatThreadType, 
   DocumentType,
   MeetingType,
   EmailType,
   TimelineItemType,
   Message
-} from '@shared/schema';
+} from '../shared/schema';
+import { IStorage } from './storage';
 
-// Helper function for type safety
+/**
+ * Helper function to convert database types to interface types
+ * This is needed because the database types might have different
+ * null/undefined handling than our TypeScript interfaces
+ */
 const fixType = <T>(data: any): T => {
   return data as T;
 };
 
+/**
+ * Database storage implementation using Drizzle ORM
+ */
 export class DatabaseStorage implements IStorage {
-  // User operations
+  /**
+   * Get a user by ID
+   */
   async getUser(id: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.id, id));
-    return result.length > 0 ? result[0] : undefined;
+    try {
+      const [user] = await db.select().from(schema.users).where(eq(schema.users.id, id));
+      if (!user) return undefined;
+      return {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        initials: user.initials,
+        avatar: user.avatar,
+        createdAt: user.createdAt
+      };
+    } catch (error) {
+      console.error('Error getting user by ID:', error);
+      return undefined;
+    }
   }
-  
+
+  /**
+   * Get a user by username
+   */
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.username, username));
-    return result.length > 0 ? result[0] : undefined;
+    try {
+      const [user] = await db.select().from(schema.users).where(eq(schema.users.username, username));
+      if (!user) return undefined;
+      return {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        initials: user.initials,
+        avatar: user.avatar,
+        createdAt: user.createdAt
+      };
+    } catch (error) {
+      console.error('Error getting user by username:', error);
+      return undefined;
+    }
   }
-  
+
+  /**
+   * Create a new user
+   */
   async createUser(userData: Omit<User, "id">): Promise<User> {
-    const id = nanoid();
-    const result = await db.insert(users)
-      .values({ ...userData, id })
-      .returning();
-    return result[0];
+    try {
+      const id = nanoid();
+      const [user] = await db.insert(schema.users).values({
+        id,
+        username: userData.username,
+        name: userData.name,
+        initials: userData.initials,
+        avatar: userData.avatar || null
+      }).returning();
+      
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        initials: user.initials,
+        avatar: user.avatar,
+        createdAt: user.createdAt
+      };
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw error;
+    }
   }
-  
-  // Timeline operations
+
+  /**
+   * Get all timeline items
+   */
   async getTimelineItems(): Promise<TimelineItemType[]> {
-    const timelineItems = await db.select().from(timeline)
-      .orderBy(desc(timeline.createdAt));
-    
-    // Load the referenced data for each timeline item
-    const result: TimelineItemType[] = [];
-    
-    for (const item of timelineItems) {
-      let data: any = null;
+    try {
+      const timelineItems = await db.select().from(schema.timeline);
+      const result: TimelineItemType[] = [];
       
-      switch (item.type) {
-        case 'task': {
-          const taskResult = await db.select().from(tasks).where(eq(tasks.id, item.itemId));
-          if (taskResult.length > 0) {
-            const task = taskResult[0];
-            const assigneeResult = await db.select().from(users).where(eq(users.id, task.assigneeId));
-            const assignee = assigneeResult.length > 0 ? assigneeResult[0] : null;
-            data = { ...task, assignee };
-          }
-          break;
-        }
-        case 'chat': {
-          const chatResult = await db.select().from(chats).where(eq(chats.id, item.itemId));
-          if (chatResult.length > 0) {
-            const chat = chatResult[0];
-            
-            // Load messages for this chat
-            const messagesResult = await db.select().from(messages).where(eq(messages.chatId, chat.id));
-            const messagesWithAuthors = [];
-            
-            for (const message of messagesResult) {
-              const authorResult = await db.select().from(users).where(eq(users.id, message.authorId));
-              const author = authorResult.length > 0 ? authorResult[0] : null;
-              messagesWithAuthors.push({ ...message, author });
-            }
-            
-            data = { ...chat, messages: messagesWithAuthors };
-          }
-          break;
-        }
-        case 'document': {
-          const documentResult = await db.select().from(documents).where(eq(documents.id, item.itemId));
-          if (documentResult.length > 0) {
-            const document = documentResult[0];
-            
-            // Load collaborators for this document
-            const collaboratorsJoin = await db.select().from(documentCollaborators)
-              .where(eq(documentCollaborators.documentId, document.id));
-            
-            const collaborators = [];
-            for (const join of collaboratorsJoin) {
-              const userResult = await db.select().from(users).where(eq(users.id, join.userId));
-              if (userResult.length > 0) {
-                collaborators.push(userResult[0]);
-              }
-            }
-            
-            data = { ...document, collaborators };
-          }
-          break;
-        }
-        case 'meeting': {
-          const meetingResult = await db.select().from(meetings).where(eq(meetings.id, item.itemId));
-          if (meetingResult.length > 0) {
-            const meeting = meetingResult[0];
-            
-            // Load participants for this meeting
-            const participantsJoin = await db.select().from(meetingParticipants)
-              .where(eq(meetingParticipants.meetingId, meeting.id));
-            
-            const participants = [];
-            for (const join of participantsJoin) {
-              const userResult = await db.select().from(users).where(eq(users.id, join.userId));
-              if (userResult.length > 0) {
-                participants.push(userResult[0]);
-              }
-            }
-            
-            data = { ...meeting, participants };
-          }
-          break;
-        }
-        case 'email': {
-          const emailResult = await db.select().from(emails).where(eq(emails.id, item.itemId));
-          if (emailResult.length > 0) {
-            const email = emailResult[0];
-            
-            // Load sender
-            const senderResult = await db.select().from(users).where(eq(users.id, email.senderId));
-            const sender = senderResult.length > 0 ? senderResult[0] : null;
-            
-            data = { ...email, sender };
-          }
-          break;
+      for (const item of timelineItems) {
+        const itemData = await this.getTimelineItemData(item.type as any, item.itemId);
+        if (itemData) {
+          result.push({
+            id: item.id,
+            type: item.type as any,
+            itemId: item.itemId,
+            createdAt: item.createdAt,
+            data: itemData
+          });
         }
       }
       
-      if (data) {
-        result.push({ ...item, data });
-      }
+      return result;
+    } catch (error) {
+      console.error('Error getting timeline items:', error);
+      return [];
     }
-    
-    return result;
   }
-  
+
+  /**
+   * Get a timeline item's data based on type and ID
+   */
+  private async getTimelineItemData(type: string, itemId: string): Promise<any> {
+    try {
+      switch(type) {
+        case 'task':
+          return await this.getTask(itemId);
+        case 'chat':
+          return await this.getChat(itemId);
+        case 'document':
+          return await this.getDocument(itemId);
+        case 'meeting':
+          return await this.getMeeting(itemId);
+        case 'email':
+          return await this.getEmail(itemId);
+        default:
+          return null;
+      }
+    } catch (error) {
+      console.error(`Error getting timeline item data for ${type}:${itemId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get a specific timeline item by ID
+   */
   async getTimelineItem(id: string): Promise<TimelineItemType | undefined> {
-    const result = await db.select().from(timeline).where(eq(timeline.id, id));
-    if (result.length === 0) {
-      return undefined;
-    }
-    
-    const item = result[0];
-    let data: any = null;
-    
-    // Load the referenced data
-    switch (item.type) {
-      case 'task': {
-        const taskResult = await db.select().from(tasks).where(eq(tasks.id, item.itemId));
-        if (taskResult.length > 0) {
-          const task = taskResult[0];
-          const assigneeResult = await db.select().from(users).where(eq(users.id, task.assigneeId));
-          const assignee = assigneeResult.length > 0 ? assigneeResult[0] : null;
-          data = { ...task, assignee };
-        }
-        break;
-      }
-      case 'chat': {
-        const chatResult = await db.select().from(chats).where(eq(chats.id, item.itemId));
-        if (chatResult.length > 0) {
-          const chat = chatResult[0];
-          
-          // Load messages for this chat
-          const messagesResult = await db.select().from(messages).where(eq(messages.chatId, chat.id));
-          const messagesWithAuthors = [];
-          
-          for (const message of messagesResult) {
-            const authorResult = await db.select().from(users).where(eq(users.id, message.authorId));
-            const author = authorResult.length > 0 ? authorResult[0] : null;
-            messagesWithAuthors.push({ ...message, author });
-          }
-          
-          data = { ...chat, messages: messagesWithAuthors };
-        }
-        break;
-      }
-      case 'document': {
-        const documentResult = await db.select().from(documents).where(eq(documents.id, item.itemId));
-        if (documentResult.length > 0) {
-          const document = documentResult[0];
-          
-          // Load collaborators for this document
-          const collaboratorsJoin = await db.select().from(documentCollaborators)
-            .where(eq(documentCollaborators.documentId, document.id));
-          
-          const collaborators = [];
-          for (const join of collaboratorsJoin) {
-            const userResult = await db.select().from(users).where(eq(users.id, join.userId));
-            if (userResult.length > 0) {
-              collaborators.push(userResult[0]);
-            }
-          }
-          
-          data = { ...document, collaborators };
-        }
-        break;
-      }
-      case 'meeting': {
-        const meetingResult = await db.select().from(meetings).where(eq(meetings.id, item.itemId));
-        if (meetingResult.length > 0) {
-          const meeting = meetingResult[0];
-          
-          // Load participants for this meeting
-          const participantsJoin = await db.select().from(meetingParticipants)
-            .where(eq(meetingParticipants.meetingId, meeting.id));
-          
-          const participants = [];
-          for (const join of participantsJoin) {
-            const userResult = await db.select().from(users).where(eq(users.id, join.userId));
-            if (userResult.length > 0) {
-              participants.push(userResult[0]);
-            }
-          }
-          
-          data = { ...meeting, participants };
-        }
-        break;
-      }
-      case 'email': {
-        const emailResult = await db.select().from(emails).where(eq(emails.id, item.itemId));
-        if (emailResult.length > 0) {
-          const email = emailResult[0];
-          
-          // Load sender
-          const senderResult = await db.select().from(users).where(eq(users.id, email.senderId));
-          const sender = senderResult.length > 0 ? senderResult[0] : null;
-          
-          data = { ...email, sender };
-        }
-        break;
-      }
-    }
-    
-    if (!data) {
-      return undefined;
-    }
-    
-    return { ...item, data };
-  }
-  
-  async addTimelineItem(item: Omit<TimelineItemType, "id">): Promise<TimelineItemType> {
-    const id = nanoid();
-    
-    // Insert the timeline item
-    const result = await db.insert(timeline)
-      .values({ 
-        id, 
-        type: item.type, 
-        createdAt: item.createdAt, 
-        itemId: item.data.id 
-      })
-      .returning();
-    
-    return { ...result[0], data: item.data };
-  }
-  
-  // Task operations
-  async getTasks(): Promise<TaskType[]> {
-    const tasksResult = await db.select().from(tasks);
-    const result: TaskType[] = [];
-    
-    // Load assignee for each task
-    for (const task of tasksResult) {
-      const assigneeResult = await db.select().from(users).where(eq(users.id, task.assigneeId));
-      const assignee = assigneeResult.length > 0 ? assigneeResult[0] : null;
+    try {
+      const [item] = await db.select().from(schema.timeline).where(eq(schema.timeline.id, id));
+      if (!item) return undefined;
       
-      if (assignee) {
-        result.push({ ...task, assignee });
+      const itemData = await this.getTimelineItemData(item.type as any, item.itemId);
+      if (!itemData) return undefined;
+      
+      return {
+        id: item.id,
+        type: item.type as any,
+        itemId: item.itemId,
+        createdAt: item.createdAt,
+        data: itemData
+      };
+    } catch (error) {
+      console.error('Error getting timeline item:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Add a new timeline item
+   */
+  async addTimelineItem(item: Omit<TimelineItemType, "id">): Promise<TimelineItemType> {
+    try {
+      const id = nanoid();
+      
+      // Insert the timeline item
+      const [timelineItem] = await db.insert(schema.timeline).values({
+        id,
+        type: item.type,
+        itemId: item.itemId,
+        createdAt: new Date()
+      }).returning();
+      
+      // Get the item data
+      const itemData = await this.getTimelineItemData(timelineItem.type as any, timelineItem.itemId);
+      
+      return {
+        id: timelineItem.id,
+        type: timelineItem.type as any,
+        createdAt: timelineItem.createdAt,
+        itemId: timelineItem.itemId,
+        data: itemData
+      };
+    } catch (error) {
+      console.error('Error adding timeline item:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all tasks
+   */
+  async getTasks(): Promise<TaskType[]> {
+    try {
+      const tasks = await db.select().from(schema.tasks);
+      const result: TaskType[] = [];
+      
+      for (const task of tasks) {
+        const assignee = await this.getUser(task.assigneeId);
+        if (assignee) {
+          result.push({
+            id: task.id,
+            ticketId: task.ticketId,
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            assigneeId: task.assigneeId,
+            assignee: assignee,
+            dueDate: task.dueDate,
+            project: task.project,
+            isCompleted: task.isCompleted,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt
+          });
+        }
       }
+      
+      return result;
+    } catch (error) {
+      console.error('Error getting tasks:', error);
+      return [];
     }
-    
-    return result;
   }
-  
+
+  /**
+   * Get a specific task by ID
+   */
   async getTask(id: string): Promise<TaskType | undefined> {
-    const taskResult = await db.select().from(tasks).where(eq(tasks.id, id));
-    if (taskResult.length === 0) {
+    try {
+      const [task] = await db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
+      if (!task) return undefined;
+      
+      const assignee = await this.getUser(task.assigneeId);
+      if (!assignee) return undefined;
+      
+      return {
+        id: task.id,
+        ticketId: task.ticketId,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        assigneeId: task.assigneeId,
+        assignee: assignee,
+        dueDate: task.dueDate,
+        project: task.project,
+        isCompleted: task.isCompleted,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt
+      };
+    } catch (error) {
+      console.error('Error getting task:', error);
       return undefined;
     }
-    
-    const task = taskResult[0];
-    
-    // Load assignee
-    const assigneeResult = await db.select().from(users).where(eq(users.id, task.assigneeId));
-    const assignee = assigneeResult.length > 0 ? assigneeResult[0] : null;
-    
-    if (!assignee) {
-      return undefined;
-    }
-    
-    return { ...task, assignee };
   }
-  
+
+  /**
+   * Add a new task
+   */
   async addTask(taskData: Omit<TaskType, "id">): Promise<TaskType> {
-    const id = nanoid();
-    
-    // Extract assignee ID
-    const assigneeId = taskData.assignee.id;
-    
-    // Save the task
-    const result = await db.insert(tasks)
-      .values({
+    try {
+      const id = nanoid();
+      
+      // Insert the task
+      const [task] = await db.insert(schema.tasks).values({
         id,
         ticketId: taskData.ticketId,
         title: taskData.title,
         description: taskData.description,
         status: taskData.status,
-        assigneeId,
+        assigneeId: taskData.assigneeId,
         dueDate: taskData.dueDate,
         project: taskData.project,
         isCompleted: taskData.isCompleted
-      })
-      .returning();
-    
-    // Create timeline entry
-    await db.insert(timeline)
-      .values({
+      }).returning();
+      
+      // Add to timeline
+      await db.insert(schema.timeline).values({
         id: nanoid(),
         type: 'task',
-        createdAt: new Date().toISOString(),
-        itemId: id
+        itemId: id,
+        createdAt: new Date()
       });
-    
-    return { ...result[0], assignee: taskData.assignee };
-  }
-  
-  async updateTask(id: string, taskUpdate: Partial<TaskType>): Promise<TaskType | undefined> {
-    // Check if task exists
-    const existingTaskResult = await db.select().from(tasks).where(eq(tasks.id, id));
-    if (existingTaskResult.length === 0) {
-      return undefined;
-    }
-    
-    // Prepare update data
-    const updateData: any = { ...taskUpdate };
-    
-    // Handle assignee if present
-    if (taskUpdate.assignee) {
-      updateData.assigneeId = taskUpdate.assignee.id;
-      delete updateData.assignee;
-    }
-    
-    // Update the task
-    const result = await db.update(tasks)
-      .set(updateData)
-      .where(eq(tasks.id, id))
-      .returning();
-    
-    if (result.length === 0) {
-      return undefined;
-    }
-    
-    // Load assignee
-    const assigneeResult = await db.select().from(users).where(eq(users.id, result[0].assigneeId));
-    const assignee = assigneeResult.length > 0 ? assigneeResult[0] : null;
-    
-    if (!assignee) {
-      return undefined;
-    }
-    
-    return { ...result[0], assignee };
-  }
-  
-  // Chat operations
-  async getChats(): Promise<ChatThreadType[]> {
-    const chatsResult = await db.select().from(chats);
-    const result: ChatThreadType[] = [];
-    
-    for (const chat of chatsResult) {
-      // Load messages for this chat
-      const messagesResult = await db.select().from(messages).where(eq(messages.chatId, chat.id));
-      const messagesWithAuthors = [];
       
-      for (const message of messagesResult) {
-        const authorResult = await db.select().from(users).where(eq(users.id, message.authorId));
-        const author = authorResult.length > 0 ? authorResult[0] : null;
+      const assignee = await this.getUser(task.assigneeId);
+      if (!assignee) throw new Error('Task assignee not found');
+      
+      return {
+        id: task.id,
+        ticketId: task.ticketId,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        assigneeId: task.assigneeId,
+        assignee,
+        dueDate: task.dueDate,
+        project: task.project,
+        isCompleted: task.isCompleted,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt
+      };
+    } catch (error) {
+      console.error('Error adding task:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update an existing task
+   */
+  async updateTask(id: string, taskUpdate: Partial<TaskType>): Promise<TaskType | undefined> {
+    try {
+      // Ensure task exists
+      const existingTask = await this.getTask(id);
+      if (!existingTask) return undefined;
+      
+      // Prepare update values
+      const updateValues: any = {};
+      if (taskUpdate.title !== undefined) updateValues.title = taskUpdate.title;
+      if (taskUpdate.description !== undefined) updateValues.description = taskUpdate.description;
+      if (taskUpdate.status !== undefined) updateValues.status = taskUpdate.status;
+      if (taskUpdate.assigneeId !== undefined) updateValues.assigneeId = taskUpdate.assigneeId;
+      if (taskUpdate.dueDate !== undefined) updateValues.dueDate = taskUpdate.dueDate;
+      if (taskUpdate.project !== undefined) updateValues.project = taskUpdate.project;
+      if (taskUpdate.isCompleted !== undefined) updateValues.isCompleted = taskUpdate.isCompleted;
+      updateValues.updatedAt = new Date();
+      
+      // Update the task
+      const [updatedTask] = await db.update(schema.tasks)
+        .set(updateValues)
+        .where(eq(schema.tasks.id, id))
+        .returning();
+      
+      const assignee = await this.getUser(updatedTask.assigneeId);
+      if (!assignee) throw new Error('Task assignee not found');
+      
+      return {
+        id: updatedTask.id,
+        ticketId: updatedTask.ticketId,
+        title: updatedTask.title,
+        description: updatedTask.description,
+        status: updatedTask.status,
+        assigneeId: updatedTask.assigneeId,
+        assignee,
+        dueDate: updatedTask.dueDate,
+        project: updatedTask.project,
+        isCompleted: updatedTask.isCompleted,
+        createdAt: updatedTask.createdAt,
+        updatedAt: updatedTask.updatedAt
+      };
+    } catch (error) {
+      console.error('Error updating task:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Get all chat threads
+   */
+  async getChats(): Promise<ChatThreadType[]> {
+    try {
+      const chats = await db.select().from(schema.chats);
+      const result: ChatThreadType[] = [];
+      
+      for (const chat of chats) {
+        // Get all messages for this chat
+        const messages = await this.getChatMessages(chat.id);
         
+        result.push({
+          id: chat.id,
+          title: chat.title,
+          channel: chat.channel,
+          priority: chat.priority as any,
+          messages,
+          createdAt: chat.createdAt,
+          updatedAt: chat.updatedAt
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error getting chats:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all messages for a chat thread
+   */
+  private async getChatMessages(chatId: string): Promise<Message[]> {
+    try {
+      const messages = await db.select()
+        .from(schema.messages)
+        .where(eq(schema.messages.chatId, chatId));
+      
+      const result: Message[] = [];
+      for (const message of messages) {
+        const author = await this.getUser(message.authorId);
         if (author) {
-          messagesWithAuthors.push({ ...message, author });
+          result.push({
+            id: message.id,
+            chatId: message.chatId,
+            authorId: message.authorId,
+            author,
+            content: message.content,
+            time: message.time,
+            codeSnippet: message.codeSnippet,
+            createdAt: message.createdAt
+          });
         }
       }
       
-      result.push({ ...chat, messages: messagesWithAuthors });
+      return result;
+    } catch (error) {
+      console.error(`Error getting messages for chat ${chatId}:`, error);
+      return [];
     }
-    
-    return result;
   }
-  
+
+  /**
+   * Get a specific chat by ID
+   */
   async getChat(id: string): Promise<ChatThreadType | undefined> {
-    const chatResult = await db.select().from(chats).where(eq(chats.id, id));
-    if (chatResult.length === 0) {
+    try {
+      const [chat] = await db.select().from(schema.chats).where(eq(schema.chats.id, id));
+      if (!chat) return undefined;
+      
+      // Get all messages for this chat
+      const messages = await this.getChatMessages(chat.id);
+      
+      return {
+        id: chat.id,
+        title: chat.title,
+        channel: chat.channel,
+        priority: chat.priority as any,
+        messages,
+        createdAt: chat.createdAt,
+        updatedAt: chat.updatedAt
+      };
+    } catch (error) {
+      console.error('Error getting chat:', error);
       return undefined;
     }
-    
-    const chat = chatResult[0];
-    
-    // Load messages for this chat
-    const messagesResult = await db.select().from(messages).where(eq(messages.chatId, chat.id));
-    const messagesWithAuthors = [];
-    
-    for (const message of messagesResult) {
-      const authorResult = await db.select().from(users).where(eq(users.id, message.authorId));
-      const author = authorResult.length > 0 ? authorResult[0] : null;
-      
-      if (author) {
-        messagesWithAuthors.push({ ...message, author });
-      }
-    }
-    
-    return { ...chat, messages: messagesWithAuthors };
   }
-  
+
+  /**
+   * Add a new chat thread
+   */
   async addChat(chatData: Omit<ChatThreadType, "id">): Promise<ChatThreadType> {
-    const id = nanoid();
-    
-    // Save the chat
-    const result = await db.insert(chats)
-      .values({
+    try {
+      const id = nanoid();
+      
+      // Insert the chat
+      const [chat] = await db.insert(schema.chats).values({
         id,
         title: chatData.title,
         channel: chatData.channel,
-        priority: chatData.priority
-      })
-      .returning();
-    
-    // Save messages
-    const savedMessages = [];
-    
-    for (const message of chatData.messages) {
-      const messageResult = await db.insert(messages)
-        .values({
-          id: nanoid(),
-          chatId: id,
-          authorId: message.author.id,
-          content: message.content,
-          time: message.time,
-          codeSnippet: message.codeSnippet
-        })
-        .returning();
+        priority: chatData.priority || null
+      }).returning();
       
-      savedMessages.push({ ...messageResult[0], author: message.author });
-    }
-    
-    // Create timeline entry
-    await db.insert(timeline)
-      .values({
+      // Add to timeline
+      await db.insert(schema.timeline).values({
         id: nanoid(),
         type: 'chat',
-        createdAt: new Date().toISOString(),
-        itemId: id
+        itemId: id,
+        createdAt: new Date()
       });
-    
-    return { ...result[0], messages: savedMessages };
-  }
-  
-  async addMessage(chatId: string, message: any): Promise<any> {
-    // Check if chat exists
-    const chatResult = await db.select().from(chats).where(eq(chats.id, chatId));
-    if (chatResult.length === 0) {
-      throw new Error(`Chat with ID ${chatId} not found`);
-    }
-    
-    // Save the message
-    const result = await db.insert(messages)
-      .values({
-        id: nanoid(),
-        chatId,
-        authorId: message.author.id,
-        content: message.content,
-        time: message.time,
-        codeSnippet: message.codeSnippet
-      })
-      .returning();
-    
-    return { ...result[0], author: message.author };
-  }
-  
-  // Document operations
-  async getDocuments(): Promise<DocumentType[]> {
-    const documentsResult = await db.select().from(documents);
-    const result: DocumentType[] = [];
-    
-    for (const document of documentsResult) {
-      // Load collaborators for this document
-      const collaboratorsJoin = await db.select().from(documentCollaborators)
-        .where(eq(documentCollaborators.documentId, document.id));
       
-      const collaborators = [];
-      for (const join of collaboratorsJoin) {
-        const userResult = await db.select().from(users).where(eq(users.id, join.userId));
-        if (userResult.length > 0) {
-          collaborators.push(userResult[0]);
+      // Handle messages if included
+      const messages: Message[] = [];
+      if (chatData.messages && chatData.messages.length > 0) {
+        for (const message of chatData.messages) {
+          const addedMessage = await this.addMessage(id, message);
+          if (addedMessage) {
+            messages.push(addedMessage as Message);
+          }
         }
       }
       
-      result.push({ ...document, collaborators });
+      return {
+        id: chat.id,
+        title: chat.title,
+        channel: chat.channel,
+        priority: chat.priority as any,
+        messages,
+        createdAt: chat.createdAt,
+        updatedAt: chat.updatedAt
+      };
+    } catch (error) {
+      console.error('Error adding chat:', error);
+      throw error;
     }
-    
-    return result;
   }
-  
+
+  /**
+   * Add a message to a chat thread
+   */
+  async addMessage(chatId: string, message: any): Promise<any> {
+    try {
+      const id = nanoid();
+      
+      // Insert the message
+      const [newMessage] = await db.insert(schema.messages).values({
+        id,
+        chatId,
+        authorId: message.authorId,
+        content: message.content,
+        time: message.time,
+        codeSnippet: message.codeSnippet || null
+      }).returning();
+      
+      // Update chat's updatedAt
+      await db.update(schema.chats)
+        .set({ updatedAt: new Date() })
+        .where(eq(schema.chats.id, chatId));
+      
+      const author = await this.getUser(newMessage.authorId);
+      if (!author) throw new Error('Message author not found');
+      
+      return {
+        id: newMessage.id,
+        chatId: newMessage.chatId,
+        authorId: newMessage.authorId,
+        author,
+        content: newMessage.content,
+        time: newMessage.time,
+        codeSnippet: newMessage.codeSnippet,
+        createdAt: newMessage.createdAt
+      };
+    } catch (error) {
+      console.error('Error adding message:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all documents
+   */
+  async getDocuments(): Promise<DocumentType[]> {
+    try {
+      const documents = await db.select().from(schema.documents);
+      const result: DocumentType[] = [];
+      
+      for (const doc of documents) {
+        // Get collaborators
+        const collaborators = await this.getDocumentCollaborators(doc.id);
+        
+        result.push({
+          id: doc.id,
+          title: doc.title,
+          content: doc.content,
+          lastEdited: doc.lastEdited,
+          collaborators,
+          createdAt: doc.createdAt,
+          updatedAt: doc.updatedAt
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error getting documents:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get collaborators for a document
+   */
+  private async getDocumentCollaborators(documentId: string): Promise<User[]> {
+    try {
+      const entries = await db.select()
+        .from(schema.documentCollaborators)
+        .where(eq(schema.documentCollaborators.documentId, documentId));
+      
+      const result: User[] = [];
+      for (const entry of entries) {
+        const user = await this.getUser(entry.userId);
+        if (user) {
+          result.push(user);
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error(`Error getting collaborators for document ${documentId}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Get a specific document by ID
+   */
   async getDocument(id: string): Promise<DocumentType | undefined> {
-    const documentResult = await db.select().from(documents).where(eq(documents.id, id));
-    if (documentResult.length === 0) {
+    try {
+      const [document] = await db.select().from(schema.documents).where(eq(schema.documents.id, id));
+      if (!document) return undefined;
+      
+      // Get collaborators
+      const collaborators = await this.getDocumentCollaborators(document.id);
+      
+      return {
+        id: document.id,
+        title: document.title,
+        content: document.content,
+        lastEdited: document.lastEdited,
+        collaborators,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt
+      };
+    } catch (error) {
+      console.error('Error getting document:', error);
       return undefined;
     }
-    
-    const document = documentResult[0];
-    
-    // Load collaborators for this document
-    const collaboratorsJoin = await db.select().from(documentCollaborators)
-      .where(eq(documentCollaborators.documentId, document.id));
-    
-    const collaborators = [];
-    for (const join of collaboratorsJoin) {
-      const userResult = await db.select().from(users).where(eq(users.id, join.userId));
-      if (userResult.length > 0) {
-        collaborators.push(userResult[0]);
-      }
-    }
-    
-    return { ...document, collaborators };
   }
-  
+
+  /**
+   * Add a new document
+   */
   async addDocument(documentData: Omit<DocumentType, "id">): Promise<DocumentType> {
-    const id = nanoid();
-    
-    // Save the document
-    const result = await db.insert(documents)
-      .values({
+    try {
+      const id = nanoid();
+      
+      // Insert the document
+      const [document] = await db.insert(schema.documents).values({
         id,
         title: documentData.title,
-        lastEdited: documentData.lastEdited,
-        content: documentData.content
-      })
-      .returning();
-    
-    // Save collaborator relationships
-    for (const collaborator of documentData.collaborators) {
-      await db.insert(documentCollaborators)
-        .values({
-          id: nanoid(),
-          documentId: id,
-          userId: collaborator.id
-        });
-    }
-    
-    // Create timeline entry
-    await db.insert(timeline)
-      .values({
+        content: documentData.content,
+        lastEdited: documentData.lastEdited
+      }).returning();
+      
+      // Add to timeline
+      await db.insert(schema.timeline).values({
         id: nanoid(),
         type: 'document',
-        createdAt: new Date().toISOString(),
-        itemId: id
+        itemId: id,
+        createdAt: new Date()
       });
-    
-    return { ...result[0], collaborators: documentData.collaborators };
-  }
-  
-  async updateDocument(id: string, documentUpdate: Partial<DocumentType>): Promise<DocumentType | undefined> {
-    // Check if document exists
-    const documentResult = await db.select().from(documents).where(eq(documents.id, id));
-    if (documentResult.length === 0) {
-      return undefined;
-    }
-    
-    // Prepare update data
-    const updateData: any = { ...documentUpdate };
-    
-    // Handle collaborators separately
-    if (updateData.collaborators) {
-      delete updateData.collaborators;
-    }
-    
-    // Update the document
-    const result = await db.update(documents)
-      .set(updateData)
-      .where(eq(documents.id, id))
-      .returning();
-    
-    if (result.length === 0) {
-      return undefined;
-    }
-    
-    // Update collaborators if provided
-    if (documentUpdate.collaborators) {
-      // Delete existing collaborator relationships
-      await db.delete(documentCollaborators)
-        .where(eq(documentCollaborators.documentId, id));
       
-      // Add new collaborator relationships
-      for (const collaborator of documentUpdate.collaborators) {
-        await db.insert(documentCollaborators)
-          .values({
-            id: nanoid(),
+      // Add collaborators if included
+      const collaborators: User[] = [];
+      if (documentData.collaborators && documentData.collaborators.length > 0) {
+        for (const collaborator of documentData.collaborators) {
+          await db.insert(schema.documentCollaborators).values({
             documentId: id,
             userId: collaborator.id
           });
-      }
-    }
-    
-    // Load collaborators
-    const collaboratorsJoin = await db.select().from(documentCollaborators)
-      .where(eq(documentCollaborators.documentId, id));
-    
-    const collaborators = [];
-    for (const join of collaboratorsJoin) {
-      const userResult = await db.select().from(users).where(eq(users.id, join.userId));
-      if (userResult.length > 0) {
-        collaborators.push(userResult[0]);
-      }
-    }
-    
-    return { ...result[0], collaborators };
-  }
-  
-  // Meeting operations
-  async getMeetings(): Promise<MeetingType[]> {
-    const meetingsResult = await db.select().from(meetings);
-    const result: MeetingType[] = [];
-    
-    for (const meeting of meetingsResult) {
-      // Load participants for this meeting
-      const participantsJoin = await db.select().from(meetingParticipants)
-        .where(eq(meetingParticipants.meetingId, meeting.id));
-      
-      const participants = [];
-      for (const join of participantsJoin) {
-        const userResult = await db.select().from(users).where(eq(users.id, join.userId));
-        if (userResult.length > 0) {
-          participants.push(userResult[0]);
+          collaborators.push(collaborator);
         }
       }
       
-      result.push({ ...meeting, participants });
+      return {
+        id: document.id,
+        title: document.title,
+        content: document.content,
+        lastEdited: document.lastEdited,
+        collaborators,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt
+      };
+    } catch (error) {
+      console.error('Error adding document:', error);
+      throw error;
     }
-    
-    return result;
   }
-  
-  async getMeeting(id: string): Promise<MeetingType | undefined> {
-    const meetingResult = await db.select().from(meetings).where(eq(meetings.id, id));
-    if (meetingResult.length === 0) {
+
+  /**
+   * Update an existing document
+   */
+  async updateDocument(id: string, documentUpdate: Partial<DocumentType>): Promise<DocumentType | undefined> {
+    try {
+      // Ensure document exists
+      const existingDocument = await this.getDocument(id);
+      if (!existingDocument) return undefined;
+      
+      // Prepare update values
+      const updateValues: any = {};
+      if (documentUpdate.title !== undefined) updateValues.title = documentUpdate.title;
+      if (documentUpdate.content !== undefined) updateValues.content = documentUpdate.content;
+      if (documentUpdate.lastEdited !== undefined) updateValues.lastEdited = documentUpdate.lastEdited;
+      updateValues.updatedAt = new Date();
+      
+      // Update the document
+      const [updatedDocument] = await db.update(schema.documents)
+        .set(updateValues)
+        .where(eq(schema.documents.id, id))
+        .returning();
+      
+      // Update collaborators if needed
+      let collaborators = existingDocument.collaborators;
+      if (documentUpdate.collaborators) {
+        // Remove all existing collaborators
+        await db.delete(schema.documentCollaborators)
+          .where(eq(schema.documentCollaborators.documentId, id));
+        
+        // Add new collaborators
+        collaborators = [];
+        for (const collaborator of documentUpdate.collaborators) {
+          await db.insert(schema.documentCollaborators).values({
+            documentId: id,
+            userId: collaborator.id
+          });
+          collaborators.push(collaborator);
+        }
+      }
+      
+      return {
+        id: updatedDocument.id,
+        title: updatedDocument.title,
+        content: updatedDocument.content,
+        lastEdited: updatedDocument.lastEdited,
+        collaborators,
+        createdAt: updatedDocument.createdAt,
+        updatedAt: updatedDocument.updatedAt
+      };
+    } catch (error) {
+      console.error('Error updating document:', error);
       return undefined;
     }
-    
-    const meeting = meetingResult[0];
-    
-    // Load participants for this meeting
-    const participantsJoin = await db.select().from(meetingParticipants)
-      .where(eq(meetingParticipants.meetingId, meeting.id));
-    
-    const participants = [];
-    for (const join of participantsJoin) {
-      const userResult = await db.select().from(users).where(eq(users.id, join.userId));
-      if (userResult.length > 0) {
-        participants.push(userResult[0]);
-      }
-    }
-    
-    return { ...meeting, participants };
   }
-  
+
+  /**
+   * Get all meetings
+   */
+  async getMeetings(): Promise<MeetingType[]> {
+    try {
+      const meetings = await db.select().from(schema.meetings);
+      const result: MeetingType[] = [];
+      
+      for (const meeting of meetings) {
+        // Get participants
+        const participants = await this.getMeetingParticipants(meeting.id);
+        
+        result.push({
+          id: meeting.id,
+          title: meeting.title,
+          startTime: meeting.startTime,
+          endTime: meeting.endTime,
+          summary: meeting.summary,
+          summaryConfidence: meeting.summaryConfidence,
+          actionItems: meeting.actionItems,
+          recordingUrl: meeting.recordingUrl,
+          participants,
+          createdAt: meeting.createdAt
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error getting meetings:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get participants for a meeting
+   */
+  private async getMeetingParticipants(meetingId: string): Promise<User[]> {
+    try {
+      const entries = await db.select()
+        .from(schema.meetingParticipants)
+        .where(eq(schema.meetingParticipants.meetingId, meetingId));
+      
+      const result: User[] = [];
+      for (const entry of entries) {
+        const user = await this.getUser(entry.userId);
+        if (user) {
+          result.push(user);
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error(`Error getting participants for meeting ${meetingId}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Get a specific meeting by ID
+   */
+  async getMeeting(id: string): Promise<MeetingType | undefined> {
+    try {
+      const [meeting] = await db.select().from(schema.meetings).where(eq(schema.meetings.id, id));
+      if (!meeting) return undefined;
+      
+      // Get participants
+      const participants = await this.getMeetingParticipants(meeting.id);
+      
+      return {
+        id: meeting.id,
+        title: meeting.title,
+        startTime: meeting.startTime,
+        endTime: meeting.endTime,
+        summary: meeting.summary,
+        summaryConfidence: meeting.summaryConfidence,
+        actionItems: meeting.actionItems,
+        recordingUrl: meeting.recordingUrl,
+        participants,
+        createdAt: meeting.createdAt
+      };
+    } catch (error) {
+      console.error('Error getting meeting:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Add a new meeting
+   */
   async addMeeting(meetingData: MeetingType): Promise<MeetingType> {
-    // Use provided ID or generate a new one
-    const id = meetingData.id || nanoid();
-    
-    // Save the meeting
-    const result = await db.insert(meetings)
-      .values({
-        id,
+    try {
+      const id = nanoid();
+      
+      // Insert the meeting
+      const [meeting] = await db.insert(schema.meetings).values({
+        id: meetingData.id || id,
         title: meetingData.title,
         startTime: meetingData.startTime,
         endTime: meetingData.endTime,
         summary: meetingData.summary,
         summaryConfidence: meetingData.summaryConfidence,
-        actionItems: meetingData.actionItems || [],
+        actionItems: meetingData.actionItems,
         recordingUrl: meetingData.recordingUrl
-      })
-      .returning();
-    
-    // Save participant relationships
-    for (const participant of meetingData.participants) {
-      await db.insert(meetingParticipants)
-        .values({
-          id: nanoid(),
-          meetingId: id,
-          userId: participant.id
-        });
-    }
-    
-    // Create timeline entry
-    await db.insert(timeline)
-      .values({
+      }).returning();
+      
+      // Add to timeline
+      await db.insert(schema.timeline).values({
         id: nanoid(),
         type: 'meeting',
-        createdAt: new Date().toISOString(),
-        itemId: id
+        itemId: meeting.id,
+        createdAt: new Date()
       });
-    
-    return { ...result[0], participants: meetingData.participants };
-  }
-  
-  // Email operations
-  async getEmails(): Promise<EmailType[]> {
-    const emailsResult = await db.select().from(emails);
-    const result: EmailType[] = [];
-    
-    for (const email of emailsResult) {
-      // Load sender
-      const senderResult = await db.select().from(users).where(eq(users.id, email.senderId));
-      const sender = senderResult.length > 0 ? senderResult[0] : null;
       
-      if (sender) {
-        result.push({ ...email, sender });
+      // Add participants if included
+      const participants: User[] = [];
+      if (meetingData.participants && meetingData.participants.length > 0) {
+        for (const participant of meetingData.participants) {
+          await db.insert(schema.meetingParticipants).values({
+            meetingId: meeting.id,
+            userId: participant.id
+          });
+          participants.push(participant);
+        }
       }
+      
+      return {
+        id: meeting.id,
+        title: meeting.title,
+        startTime: meeting.startTime,
+        endTime: meeting.endTime,
+        summary: meeting.summary,
+        summaryConfidence: meeting.summaryConfidence,
+        actionItems: meeting.actionItems,
+        recordingUrl: meeting.recordingUrl,
+        participants,
+        createdAt: meeting.createdAt
+      };
+    } catch (error) {
+      console.error('Error adding meeting:', error);
+      throw error;
     }
-    
-    return result;
   }
-  
+
+  /**
+   * Get all emails
+   */
+  async getEmails(): Promise<EmailType[]> {
+    try {
+      const emails = await db.select().from(schema.emails);
+      const result: EmailType[] = [];
+      
+      for (const email of emails) {
+        const sender = await this.getUser(email.senderId);
+        if (sender) {
+          result.push({
+            id: email.id,
+            subject: email.subject,
+            senderId: email.senderId,
+            sender,
+            recipient: email.recipient,
+            time: email.time,
+            paragraphs: email.paragraphs,
+            summary: email.summary,
+            summaryConfidence: email.summaryConfidence,
+            createdAt: email.createdAt
+          });
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error getting emails:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get a specific email by ID
+   */
   async getEmail(id: string): Promise<EmailType | undefined> {
-    const emailResult = await db.select().from(emails).where(eq(emails.id, id));
-    if (emailResult.length === 0) {
+    try {
+      const [email] = await db.select().from(schema.emails).where(eq(schema.emails.id, id));
+      if (!email) return undefined;
+      
+      const sender = await this.getUser(email.senderId);
+      if (!sender) return undefined;
+      
+      return {
+        id: email.id,
+        subject: email.subject,
+        senderId: email.senderId,
+        sender,
+        recipient: email.recipient,
+        time: email.time,
+        paragraphs: email.paragraphs,
+        summary: email.summary,
+        summaryConfidence: email.summaryConfidence,
+        createdAt: email.createdAt
+      };
+    } catch (error) {
+      console.error('Error getting email:', error);
       return undefined;
     }
-    
-    const email = emailResult[0];
-    
-    // Load sender
-    const senderResult = await db.select().from(users).where(eq(users.id, email.senderId));
-    const sender = senderResult.length > 0 ? senderResult[0] : null;
-    
-    if (!sender) {
-      return undefined;
-    }
-    
-    return { ...email, sender };
   }
-  
+
+  /**
+   * Add a new email
+   */
   async addEmail(emailData: Omit<EmailType, "id">): Promise<EmailType> {
-    const id = nanoid();
-    
-    // Save the email
-    const result = await db.insert(emails)
-      .values({
+    try {
+      const id = nanoid();
+      
+      // Insert the email
+      const [email] = await db.insert(schema.emails).values({
         id,
         subject: emailData.subject,
-        senderId: emailData.sender.id,
+        senderId: emailData.senderId,
         recipient: emailData.recipient,
         time: emailData.time,
-        paragraphs: emailData.paragraphs || [],
+        paragraphs: emailData.paragraphs,
         summary: emailData.summary,
         summaryConfidence: emailData.summaryConfidence
-      })
-      .returning();
-    
-    // Create timeline entry
-    await db.insert(timeline)
-      .values({
+      }).returning();
+      
+      // Add to timeline
+      await db.insert(schema.timeline).values({
         id: nanoid(),
         type: 'email',
-        createdAt: new Date().toISOString(),
-        itemId: id
+        itemId: id,
+        createdAt: new Date()
       });
-    
-    return { ...result[0], sender: emailData.sender };
+      
+      const sender = await this.getUser(email.senderId);
+      if (!sender) throw new Error('Email sender not found');
+      
+      return {
+        id: email.id,
+        subject: email.subject,
+        senderId: email.senderId,
+        sender,
+        recipient: email.recipient,
+        time: email.time,
+        paragraphs: email.paragraphs,
+        summary: email.summary,
+        summaryConfidence: email.summaryConfidence,
+        createdAt: email.createdAt
+      };
+    } catch (error) {
+      console.error('Error adding email:', error);
+      throw error;
+    }
   }
 }
