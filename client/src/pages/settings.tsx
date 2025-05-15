@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
 import { getOpenAIApiKey, saveOpenAIApiKey, verifyOpenAIApiKey } from "@/lib/ai-service";
+import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
 import {
   Settings as SettingsIcon,
   User,
@@ -27,7 +29,10 @@ import {
   Key,
   UserPlus,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  CreditCard,
+  ArrowRight,
+  BadgeCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
