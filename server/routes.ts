@@ -7,8 +7,18 @@ import fs from "fs";
 import { sql } from "drizzle-orm";
 import { users } from "@shared/schema";
 import { setupAuth } from "./auth";
+import Stripe from "stripe";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize Stripe
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.warn('No STRIPE_SECRET_KEY found in environment variables. Stripe functionality will be limited.');
+  }
+  
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+    apiVersion: '2023-10-16',
+  });
+  
   // Set up authentication
   setupAuth(app);
   // Serve demo page - static HTML that doesn't rely on WebSockets or React

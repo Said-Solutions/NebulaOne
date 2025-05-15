@@ -6,151 +6,165 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
 import { User } from "@shared/schema";
+import memorystore from "memorystore";
 
-declare global {
-  namespace Express {
-    interface User {
-      id: string;
-      username: string;
-      email: string;
-      name: string;
-      initials: string;
-      avatar?: string | null;
-      role?: string;
-      stripeCustomerId?: string;
-      stripeSubscriptionId?: string;
-      stripeSubscriptionStatus?: string;
-      subscriptionPlan?: string;
-      subscriptionExpiry?: Date;
-      createdAt?: Date;
-    }
-  }
-}
-
+// Promisify scrypt
 const scryptAsync = promisify(scrypt);
 
-async function hashPassword(password: string) {
+// Create a memory store for sessions
+const MemoryStore = memorystore(session);
+const sessionStore = new MemoryStore({
+  checkPeriod: 86400000, // prune expired entries every 24h
+});
+
+// Password hashing function
+async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString("hex")}.${salt}`;
 }
 
-async function comparePasswords(supplied: string, stored: string) {
+// Password comparison function
+async function comparePasswords(supplied: string, stored: string): Promise<boolean> {
   const [hashed, salt] = stored.split(".");
   const hashedBuf = Buffer.from(hashed, "hex");
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-export function setupAuth(app: Express) {
-  const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || "nebula-one-secret-key",
+// Set up authentication middleware
+export function setupAuth(app: Express): void {
+  // Session configuration
+  const sessionConfig: session.SessionOptions = {
+    secret: process.env.SESSION_SECRET || "nebulaone-secret-key", // use environment variable in production
     resave: false,
     saveUninitialized: false,
+    store: sessionStore,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    }
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      httpOnly: true,
+    },
   };
 
-  app.set("trust proxy", 1);
-  app.use(session(sessionSettings));
+  // Set up sessions and Passport
+  app.use(session(sessionConfig));
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Configure Passport to use local strategy
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
-        const user = await storage.getUserByUsername(username);
-        if (!user || !user.password || !(await comparePasswords(password, user.password))) {
-          return done(null, false);
-        } else {
-          // Don't send password back to client
-          const { password, ...userWithoutPassword } = user;
-          return done(null, userWithoutPassword as User);
+        // First try to find user by username
+        let user = await storage.getUserByUsername(username);
+        
+        // If not found by username, try by email
+        if (!user && username.includes("@")) {
+          user = await storage.getUserByEmail(username);
         }
+        
+        // If user not found or password doesn't match
+        if (!user || !user.password || !(await comparePasswords(password, user.password))) {
+          return done(null, false, { message: "Invalid username or password" });
+        }
+        
+        // Success - return user without password
+        const { password: _, ...userWithoutPassword } = user;
+        return done(null, userWithoutPassword);
       } catch (error) {
         return done(error);
       }
-    }),
+    })
   );
 
-  passport.serializeUser((user: Express.User, done) => done(null, user.id));
+  // Serialize user to session
+  passport.serializeUser((user: Express.User, done) => {
+    done(null, user.id);
+  });
+
+  // Deserialize user from session
   passport.deserializeUser(async (id: string, done) => {
     try {
       const user = await storage.getUser(id);
-      if (user) {
-        // Don't send password back to client
-        const { password, ...userWithoutPassword } = user;
-        done(null, userWithoutPassword as Express.User);
-      } else {
-        done(new Error("User not found"));
+      if (!user) {
+        return done(null, false);
       }
+      
+      // Don't send password to client
+      const { password: _, ...userWithoutPassword } = user;
+      done(null, userWithoutPassword);
     } catch (error) {
       done(error);
     }
   });
 
+  // Registration endpoint
   app.post("/api/register", async (req, res, next) => {
     try {
-      const existingUser = await storage.getUserByUsername(req.body.username);
-      if (existingUser) {
-        return res.status(400).send({ message: "Username already exists" });
+      // Check if username already exists
+      const existingUsername = await storage.getUserByUsername(req.body.username);
+      if (existingUsername) {
+        return res.status(400).json({ message: "Username already exists" });
       }
 
       // Check if email already exists
-      const userWithSameEmail = await storage.getUserByEmail(req.body.email);
-      if (userWithSameEmail) {
-        return res.status(400).send({ message: "Email already in use" });
+      if (req.body.email) {
+        const existingEmail = await storage.getUserByEmail(req.body.email);
+        if (existingEmail) {
+          return res.status(400).json({ message: "Email already in use" });
+        }
       }
 
-      // Hash password
-      const hashedPassword = await hashPassword(req.body.password);
-      
-      // Generate initials from name if not provided
-      if (!req.body.initials && req.body.name) {
-        const nameWords = req.body.name.split(' ');
-        req.body.initials = nameWords.map((word: string) => word[0]).join('').toUpperCase();
-      }
-
+      // Create user with hashed password
       const user = await storage.createUser({
         ...req.body,
-        password: hashedPassword,
+        id: `user_${Date.now()}`, // simple ID generation
+        password: await hashPassword(req.body.password),
+        createdAt: new Date(),
       });
 
-      // Remove password before sending response
-      const { password, ...userWithoutPassword } = user;
-      
+      // Remove password from response
+      const { password: _, ...userWithoutPassword } = user;
+
+      // Log the user in
       req.login(userWithoutPassword, (err) => {
         if (err) return next(err);
         res.status(201).json(userWithoutPassword);
       });
     } catch (error) {
-      next(error);
+      res.status(500).json({ message: "Error creating user" });
     }
   });
 
+  // Login endpoint
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err: Error | null, user: Express.User | false, info: { message: string }) => {
+    passport.authenticate("local", (err, user, info) => {
       if (err) return next(err);
-      if (!user) return res.status(401).json({ message: "Invalid username or password" });
-      
-      req.login(user, (err: Error | null) => {
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Authentication failed" });
+      }
+      req.login(user, (err) => {
         if (err) return next(err);
-        return res.status(200).json(user);
+        return res.json(user);
       });
     })(req, res, next);
   });
 
-  app.post("/api/logout", (req, res, next) => {
+  // Logout endpoint
+  app.post("/api/logout", (req, res) => {
     req.logout((err) => {
-      if (err) return next(err);
-      res.sendStatus(200);
+      if (err) {
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.status(200).json({ message: "Logged out successfully" });
     });
   });
 
+  // Current user endpoint
   app.get("/api/user", (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
     res.json(req.user);
   });
 }

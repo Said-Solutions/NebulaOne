@@ -5,9 +5,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { User } from "@shared/schema";
-import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+// Types for authentication
 type AuthContextType = {
   user: User | null;
   isLoading: boolean;
@@ -21,28 +22,67 @@ type LoginData = {
   username: string;
   password: string;
 };
-type RegisterData = Omit<User, "id">;
 
-export const AuthContext = createContext<AuthContextType | null>(null);
+type RegisterData = {
+  username: string;
+  password: string;
+  email: string;
+  name: string;
+  initials: string;
+};
 
+// Create the auth context
+const AuthContext = createContext<AuthContextType | null>(null);
+
+// Auth provider component
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  
+  // Get current user data
   const {
     data: user,
     error,
     isLoading,
   } = useQuery<User | undefined, Error>({
     queryKey: ["/api/user"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
+    queryFn: async ({ signal }) => {
+      try {
+        const response = await fetch("/api/user", { signal });
+        
+        if (response.status === 401) {
+          return undefined;
+        }
+        
+        if (!response.ok) {
+          throw new Error("Failed to fetch user data");
+        }
+        
+        return await response.json();
+      } catch (error) {
+        if ((error as Error).name === "AbortError") {
+          return undefined;
+        }
+        throw error;
+      }
+    },
   });
 
+  // Login mutation
   const loginMutation = useMutation({
-    mutationFn: async (credentials: LoginData) => {
+    mutationFn: async (credentials: LoginData): Promise<User> => {
       const res = await apiRequest("POST", "/api/login", credentials);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Login failed. Please check your credentials.");
+      }
       return await res.json();
     },
-    onSuccess: (user: User) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (userData: User) => {
+      queryClient.setQueryData(["/api/user"], userData);
+      toast({
+        title: "Login successful",
+        description: `Welcome back, ${userData.name}!`,
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -53,13 +93,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Register mutation
   const registerMutation = useMutation({
-    mutationFn: async (userData: RegisterData) => {
+    mutationFn: async (userData: RegisterData): Promise<User> => {
       const res = await apiRequest("POST", "/api/register", userData);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Registration failed. Please try again.");
+      }
       return await res.json();
     },
-    onSuccess: (user: User) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (userData: User) => {
+      queryClient.setQueryData(["/api/user"], userData);
+      toast({
+        title: "Registration successful",
+        description: `Welcome to NebulaOne, ${userData.name}!`,
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -70,12 +119,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Logout mutation
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
+      const res = await apiRequest("POST", "/api/logout");
+      if (!res.ok) {
+        throw new Error("Logout failed");
+      }
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/user"], null);
+      queryClient.invalidateQueries({queryKey: ["/api/user"]});
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out",
+      });
     },
     onError: (error: Error) => {
       toast({
@@ -102,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// Hook to use the auth context
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
