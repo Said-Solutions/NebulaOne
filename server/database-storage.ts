@@ -128,6 +128,54 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
+   * Get a user by Stripe customer ID
+   */
+  async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
+    try {
+      const result = await db
+        .select()
+        .from(users)
+        .where(eq(users.stripeCustomerId, customerId));
+      
+      if (result.length === 0) return undefined;
+      return fixType<User>(result[0]);
+    } catch (error) {
+      console.error("Failed to get user by Stripe customer ID:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update subscription details for a user
+   */
+  async updateSubscriptionDetails(userId: string, details: { 
+    status: string, 
+    plan: string, 
+    expiryDate: Date 
+  }): Promise<User> {
+    try {
+      const result = await db
+        .update(users)
+        .set({
+          stripeSubscriptionStatus: details.status,
+          subscriptionPlan: details.plan,
+          subscriptionExpiry: details.expiryDate,
+        })
+        .where(eq(users.id, userId))
+        .returning();
+      
+      if (result.length === 0) {
+        throw new Error(`User with ID ${userId} not found`);
+      }
+      
+      return fixType<User>(result[0]);
+    } catch (error) {
+      console.error("Failed to update subscription details:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Get all timeline items
    */
   async getTimelineItems(): Promise<TimelineItemType[]> {
