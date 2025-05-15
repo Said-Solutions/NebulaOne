@@ -32,12 +32,7 @@ const PlaceholderModule = ({ title, description }: { title: string, description:
 );
 
 // Lazy-loaded module pages
-const ChatPage = lazy(() => Promise.resolve({
-  default: () => <PlaceholderModule 
-    title="Chat Module" 
-    description="Real-time communication hub (Slack alternative)" 
-  />
-}));
+const ChatPage = lazy(() => import('./pages/chat'));
 
 const EmailPage = lazy(() => Promise.resolve({
   default: () => <PlaceholderModule 
