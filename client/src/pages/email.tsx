@@ -188,16 +188,28 @@ const EmailThreadItem = ({
         transition-colors duration-150
         ${isSelected ? 'bg-neutral-100 dark:bg-neutral-800' : ''}
         ${!thread.isRead ? 'font-medium' : ''}
+        ${thread.isCompleted ? 'opacity-60' : ''}
       `}
       onClick={onSelect}
     >
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 pt-1">
-          <Checkbox 
-            id={`thread-${thread.id}`} 
-            className="mt-1"
-            onClick={(e) => e.stopPropagation()}
-          />
+          <div className="flex items-center">
+            <Checkbox 
+              id={`thread-${thread.id}`} 
+              className="mt-1"
+              checked={thread.isCompleted}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!thread.isCompleted) {
+                  onMarkCompleted();
+                }
+              }}
+            />
+            {thread.isCompleted && (
+              <span className="ml-1 text-xs text-green-500">Completed</span>
+            )}
+          </div>
         </div>
         
         <Avatar className="flex-shrink-0 mt-1">
@@ -1005,6 +1017,18 @@ const EmailPage = () => {
   
   return (
     <div className="flex h-full overflow-hidden">
+      {/* AI Assistant Panel - visible when isAiPanelOpen is true */}
+      {isAiPanelOpen && (
+        <div className="w-96 flex-shrink-0 border-r border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex flex-col h-full overflow-hidden">
+          <EmailAiAssistantPanel 
+            threads={emailThreads}
+            onUpdateThreads={handleUpdateThreads}
+            onSelectThread={handleSelectThread}
+            onCreateTask={handleCreateTask}
+          />
+        </div>
+      )}
+      
       {/* Left sidebar */}
       <div className="w-64 flex-shrink-0 border-r border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex flex-col">
         <div className="p-4">
@@ -1480,6 +1504,7 @@ const EmailPage = () => {
                     thread={thread}
                     isSelected={selectedThreadId === thread.id}
                     onSelect={() => handleSelectThread(thread.id)}
+                    onMarkCompleted={() => handleMarkAsCompleted(thread.id)}
                   />
                 ))}
                 
