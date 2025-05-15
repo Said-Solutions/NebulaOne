@@ -13,10 +13,12 @@ import {
   LucideMenu,
   LucideX,
   LucideClock,
-  LucideBrain
+  LucideBrain,
+  LucideLogOut
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useAuth } from '@/hooks/use-auth';
 
 // Main navigation links
 const navItems = [
@@ -35,11 +37,21 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children }: MainLayoutProps) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, logoutMutation } = useAuth();
 
   // Get the current page name from the location
   const currentPageName = navItems.find(item => item.path === location)?.name || 'NebulaOne';
+  
+  // Handle logout
+  const handleLogout = () => {
+    logoutMutation.mutate(undefined, {
+      onSuccess: () => {
+        navigate('/auth');
+      }
+    });
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-neutral-50 dark:bg-neutral-900">
@@ -57,7 +69,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         <h1 className="text-lg font-semibold">{currentPageName}</h1>
         <Avatar className="h-8 w-8">
           <AvatarImage src="" alt="User" />
-          <AvatarFallback>UN</AvatarFallback>
+          <AvatarFallback>{user?.initials || 'UN'}</AvatarFallback>
         </Avatar>
       </div>
 
@@ -109,17 +121,30 @@ export default function MainLayout({ children }: MainLayoutProps) {
             
             <div className="absolute bottom-0 left-0 right-0 p-4">
               <Separator className="mb-4" />
-              <Button 
-                variant="outline" 
-                className="w-full justify-start"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  window.location.href = "/settings";
-                }}
-              >
-                <LucideSettings className="mr-2 h-4 w-4" />
-                Settings
-              </Button>
+              <div className="space-y-2">
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    window.location.href = "/settings";
+                  }}
+                >
+                  <LucideSettings className="mr-2 h-4 w-4" />
+                  Settings
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleLogout();
+                  }}
+                >
+                  <LucideLogOut className="mr-2 h-4 w-4" />
+                  Logout
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -153,22 +178,35 @@ export default function MainLayout({ children }: MainLayoutProps) {
               </nav>
             </div>
             <div className="p-4 border-t">
-              <div className="flex items-center">
+              <div className="flex items-center mb-3">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="" alt="User" />
-                  <AvatarFallback>UN</AvatarFallback>
+                  <AvatarFallback>{user?.initials || 'UN'}</AvatarFallback>
                 </Avatar>
                 <div className="ml-3">
-                  <p className="text-sm font-medium">User Name</p>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-xs text-neutral-500 h-auto p-0"
-                    onClick={() => window.location.href = "/settings"}
-                  >
-                    Settings
-                  </Button>
+                  <p className="text-sm font-medium">{user?.name || 'User'}</p>
+                  <p className="text-xs text-neutral-500">{user?.email || ''}</p>
                 </div>
+              </div>
+              <div className="flex space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1 text-xs"
+                  onClick={() => navigate("/settings")}
+                >
+                  <LucideSettings className="h-3 w-3 mr-1" />
+                  Settings
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  onClick={handleLogout}
+                >
+                  <LucideLogOut className="h-3 w-3 mr-1" />
+                  Logout
+                </Button>
               </div>
             </div>
           </div>
