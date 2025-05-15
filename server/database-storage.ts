@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { db } from './db';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, SQL } from 'drizzle-orm';
 import { IStorage } from './storage';
 import {
   users,
@@ -19,8 +19,14 @@ import {
   DocumentType,
   MeetingType,
   EmailType,
-  TimelineItemType
+  TimelineItemType,
+  Message
 } from '@shared/schema';
+
+// Helper function for type safety
+const fixType = <T>(data: any): T => {
+  return data as T;
+};
 
 export class DatabaseStorage implements IStorage {
   // User operations
