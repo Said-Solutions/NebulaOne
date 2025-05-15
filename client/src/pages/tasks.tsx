@@ -674,7 +674,12 @@ const ProjectBoard = ({
               <TaskCard key={task.id} task={task} compact />
             ))}
             
-            <Button variant="ghost" size="sm" className="justify-start w-full">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="justify-start w-full"
+              onClick={onAddTask}
+            >
               <Plus className="h-4 w-4 mr-2" /> Add issue
             </Button>
           </div>
@@ -693,7 +698,12 @@ const ProjectBoard = ({
               <TaskCard key={task.id} task={task} compact />
             ))}
             
-            <Button variant="ghost" size="sm" className="justify-start w-full">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="justify-start w-full"
+              onClick={onAddTask}
+            >
               <Plus className="h-4 w-4 mr-2" /> Add issue
             </Button>
           </div>
