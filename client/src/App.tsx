@@ -34,12 +34,7 @@ const PlaceholderModule = ({ title, description }: { title: string, description:
 // Lazy-loaded module pages
 const ChatPage = lazy(() => import('./pages/chat'));
 
-const EmailPage = lazy(() => Promise.resolve({
-  default: () => <PlaceholderModule 
-    title="Email Module" 
-    description="Smart email management (Shortwave alternative)" 
-  />
-}));
+const EmailPage = lazy(() => import('./pages/email'));
 
 const MeetingsPage = lazy(() => Promise.resolve({
   default: () => <PlaceholderModule 
