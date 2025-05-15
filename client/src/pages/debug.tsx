@@ -1,5 +1,6 @@
 import { Link } from 'wouter';
 import ConnectionTest from '@/components/debug/ConnectionTest';
+import DatabaseStatus from '@/components/debug/DatabaseStatus';
 
 export default function DebugPage() {
   return (
@@ -24,11 +25,7 @@ export default function DebugPage() {
           
           <div>
             <h2 className="text-lg font-medium mb-4">Database Status</h2>
-            <div className="bg-white dark:bg-neutral-800 shadow rounded-lg p-6">
-              <p className="text-neutral-600 dark:text-neutral-300">
-                Database diagnostic tools will be displayed here.
-              </p>
-            </div>
+            <DatabaseStatus />
           </div>
         </div>
       </main>

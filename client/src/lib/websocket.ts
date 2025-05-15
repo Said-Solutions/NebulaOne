@@ -109,11 +109,11 @@ class WebSocketClient {
   private getReadyStateString(): string {
     if (!this.socket) return 'null';
     
-    const states = {
-      [WebSocket.CONNECTING]: 'CONNECTING',
-      [WebSocket.OPEN]: 'OPEN',
-      [WebSocket.CLOSING]: 'CLOSING',
-      [WebSocket.CLOSED]: 'CLOSED'
+    const states: Record<number, string> = {
+      0: 'CONNECTING',
+      1: 'OPEN',
+      2: 'CLOSING',
+      3: 'CLOSED'
     };
     
     return states[this.socket.readyState] || `Unknown (${this.socket.readyState})`;
@@ -204,7 +204,7 @@ class WebSocketClient {
   }
 
   // Handler for WebSocket open event
-  private handleOpen = (): void => {
+  private handleOpen = (_event?: Event): void => {
     console.log('WebSocket connection established');
     this.reconnectAttempts = 0;
     this.updateStatus('connected');
