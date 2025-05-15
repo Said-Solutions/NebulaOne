@@ -9,7 +9,21 @@ import { User } from "@shared/schema";
 
 declare global {
   namespace Express {
-    interface User extends User {}
+    interface User {
+      id: string;
+      username: string;
+      email: string;
+      name: string;
+      initials: string;
+      avatar?: string | null;
+      role?: string;
+      stripeCustomerId?: string;
+      stripeSubscriptionId?: string;
+      stripeSubscriptionStatus?: string;
+      subscriptionPlan?: string;
+      subscriptionExpiry?: Date;
+      createdAt?: Date;
+    }
   }
 }
 
@@ -61,14 +75,14 @@ export function setupAuth(app: Express) {
     }),
   );
 
-  passport.serializeUser((user, done) => done(null, user.id));
+  passport.serializeUser((user: Express.User, done) => done(null, user.id));
   passport.deserializeUser(async (id: string, done) => {
     try {
       const user = await storage.getUser(id);
       if (user) {
         // Don't send password back to client
         const { password, ...userWithoutPassword } = user;
-        done(null, userWithoutPassword as User);
+        done(null, userWithoutPassword as Express.User);
       } else {
         done(new Error("User not found"));
       }
@@ -96,7 +110,7 @@ export function setupAuth(app: Express) {
       // Generate initials from name if not provided
       if (!req.body.initials && req.body.name) {
         const nameWords = req.body.name.split(' ');
-        req.body.initials = nameWords.map(word => word[0]).join('').toUpperCase();
+        req.body.initials = nameWords.map((word: string) => word[0]).join('').toUpperCase();
       }
 
       const user = await storage.createUser({
@@ -117,11 +131,11 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: Error | null, user: Express.User | false, info: { message: string }) => {
       if (err) return next(err);
       if (!user) return res.status(401).json({ message: "Invalid username or password" });
       
-      req.login(user, (err) => {
+      req.login(user, (err: Error | null) => {
         if (err) return next(err);
         return res.status(200).json(user);
       });

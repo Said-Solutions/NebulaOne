@@ -6,8 +6,11 @@ import path from "path";
 import fs from "fs";
 import { sql } from "drizzle-orm";
 import { users } from "@shared/schema";
+import { setupAuth } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Set up authentication
+  setupAuth(app);
   // Serve demo page - static HTML that doesn't rely on WebSockets or React
   app.get('/demo', (req, res) => {
     try {

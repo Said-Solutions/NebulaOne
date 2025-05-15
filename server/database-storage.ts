@@ -47,6 +47,20 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
   }
+  
+  /**
+   * Get a user by email
+   */
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    try {
+      const result = await db.select().from(users).where(eq(users.email, email));
+      if (result.length === 0) return undefined;
+      return fixType<User>(result[0]);
+    } catch (error) {
+      console.error("Failed to get user by email:", error);
+      return undefined;
+    }
+  }
 
   /**
    * Create a new user
@@ -59,6 +73,56 @@ export class DatabaseStorage implements IStorage {
       return fixType<User>(result[0]);
     } catch (error) {
       console.error("Failed to create user:", error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Update Stripe customer ID for a user
+   */
+  async updateStripeCustomerId(userId: string, customerId: string): Promise<User> {
+    try {
+      const result = await db
+        .update(users)
+        .set({ stripeCustomerId: customerId })
+        .where(eq(users.id, userId))
+        .returning();
+      
+      if (result.length === 0) {
+        throw new Error(`User with ID ${userId} not found`);
+      }
+      
+      return fixType<User>(result[0]);
+    } catch (error) {
+      console.error("Failed to update Stripe customer ID:", error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Update user's Stripe information with customer ID and subscription ID
+   */
+  async updateUserStripeInfo(userId: string, info: { customerId: string, subscriptionId: string }): Promise<User> {
+    try {
+      const result = await db
+        .update(users)
+        .set({
+          stripeCustomerId: info.customerId,
+          stripeSubscriptionId: info.subscriptionId,
+          stripeSubscriptionStatus: 'active',
+          subscriptionPlan: 'premium',
+          subscriptionExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        })
+        .where(eq(users.id, userId))
+        .returning();
+      
+      if (result.length === 0) {
+        throw new Error(`User with ID ${userId} not found`);
+      }
+      
+      return fixType<User>(result[0]);
+    } catch (error) {
+      console.error("Failed to update user Stripe info:", error);
       throw error;
     }
   }
