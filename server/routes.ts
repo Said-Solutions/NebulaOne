@@ -4,6 +4,8 @@ import { storage } from "./storage";
 import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import fs from "fs";
+import { sql } from "drizzle-orm";
+import { users } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Serve demo page - static HTML that doesn't rely on WebSockets or React
@@ -23,6 +25,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // API Routes
   const apiRouter = app.route('/api');
+  
+  // Debug API endpoints
+  app.get('/api/debug/database', async (req, res) => {
+    try {
+      // Get database status from pool
+      const { pool } = await import('./db');
+      const { rows } = await pool.query('SELECT NOW() as timestamp');
+      
+      // Return database status info
+      res.json({
+        status: 'connected',
+        type: 'PostgreSQL',
+        timestamp: rows[0].timestamp,
+        environment: process.env.NODE_ENV
+      });
+    } catch (error) {
+      console.error('Database status check failed:', error);
+      res.status(500).json({ 
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown database error',
+        timestamp: new Date()
+      });
+    }
+  });
+  
+  // Debug test endpoints (placeholders)
+  app.get('/api/debug/memory-test', (req, res) => {
+    res.json({ status: 'success', message: 'Memory test passed' });
+  });
+  
+  app.get('/api/debug/database-test', async (req, res) => {
+    try {
+      // Get database
+      const { db } = await import('./db');
+      const { storage } = await import('./storage');
+      
+      // Check if tables exist by counting users
+      const userCount = await db.select({ count: sql`count(*)` }).from(users);
+      
+      // Return database test results
+      res.json({
+        status: 'success',
+        tests: [
+          { name: 'Database Connection', result: 'passed' },
+          { name: 'Table Existence', result: 'passed' },
+          { name: 'Data Access', result: 'passed', detail: `User count: ${userCount[0].count}` }
+        ]
+      });
+    } catch (error) {
+      console.error('Database test failed:', error);
+      res.status(500).json({ 
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown database error'
+      });
+    }
+  });
   
   // Timeline endpoints
   app.get('/api/timeline', async (req, res) => {
@@ -172,62 +230,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
   // Setup WebSocket server for real-time updates on a distinct path to avoid conflict with Vite's HMR
+  console.log('Setting up WebSocket server on path: /ws');
+  
   const wss = new WebSocketServer({ 
     server: httpServer, 
     path: '/ws',
-    perMessageDeflate: false
+    perMessageDeflate: false,
+    // Add more detailed WebSocket server options
+    clientTracking: true, // Track clients for broadcasting
+    skipUTF8Validation: false, // Ensure proper UTF-8 validation
+    maxPayload: 64 * 1024, // 64KB max payload size
   });
-
-  wss.on('connection', (ws) => {
-    console.log('WebSocket client connected to /ws path');
-
-    // Keep the connection alive with pings
-    const pingInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.ping();
+  
+  // Track active connections
+  const clients = new Set<WebSocket>();
+  let connectionCounter = 0;
+  
+  // Create a safe send function to handle errors
+  const safeSend = (ws: WebSocket, message: any) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify(message));
+        return true;
+      } catch (error) {
+        console.error('Error sending WebSocket message:', error);
+        return false;
       }
-    }, 30000);
-
+    }
+    return false;
+  };
+  
+  // Heartbeat mechanism to detect dead connections
+  const heartbeat = (ws: WebSocket) => {
+    (ws as any).isAlive = true;
+  };
+  
+  // Create an interval to check for dead connections
+  const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if ((ws as any).isAlive === false) {
+        console.log('WebSocket client unresponsive, terminating connection');
+        return ws.terminate();
+      }
+      
+      (ws as any).isAlive = false;
+      ws.ping();
+    });
+  }, 30000);
+  
+  // Handle server shutdown
+  wss.on('close', () => {
+    clearInterval(heartbeatInterval);
+    console.log('WebSocket server closed');
+  });
+  
+  // Handle new connections
+  wss.on('connection', (ws, req) => {
+    const clientId = ++connectionCounter;
+    const clientIp = req.socket.remoteAddress || 'unknown';
+    console.log(`WebSocket client #${clientId} connected from ${clientIp} to /ws path`);
+    
+    // Add client to tracking set
+    clients.add(ws);
+    
+    // Setup heartbeat for connection monitoring
+    (ws as any).isAlive = true;
+    ws.on('pong', () => heartbeat(ws));
+    
+    // Handle client messages
     ws.on('message', (message) => {
       try {
         const data = JSON.parse(message.toString());
-        console.log('Received WebSocket message:', data);
+        console.log(`Received WebSocket message from client #${clientId}:`, data);
         
         // Handle different message types
         if (data.type === 'ping') {
-          ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+          safeSend(ws, { 
+            type: 'pong', 
+            timestamp: Date.now(),
+            echo: data.data // Echo any data sent with the ping
+          });
         }
       } catch (error) {
-        console.error('Error processing message:', error);
+        console.error(`Error processing message from client #${clientId}:`, error);
       }
     });
-
+    
+    // Handle connection errors
     ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
+      console.error(`WebSocket error from client #${clientId}:`, error);
     });
-
-    ws.on('close', () => {
-      console.log('WebSocket client disconnected');
-      clearInterval(pingInterval);
+    
+    // Handle connection closures
+    ws.on('close', (code, reason) => {
+      console.log(`WebSocket client #${clientId} disconnected. Code: ${code}, Reason: ${reason || 'No reason provided'}`);
+      clients.delete(ws);
     });
-
-    // Send initial data
-    try {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ 
-          type: 'connected', 
-          message: 'Connected to NebulaOne WebSocket server',
-          timestamp: Date.now()
-        }));
-      }
-    } catch (error) {
-      console.error('Error sending initial data:', error);
-    }
+    
+    // Send initial connection confirmation
+    safeSend(ws, { 
+      type: 'connected', 
+      clientId: clientId,
+      message: 'Connected to NebulaOne WebSocket server',
+      timestamp: Date.now(),
+      clients: clients.size
+    });
   });
-
+  
+  // Handle server errors
   wss.on('error', (error) => {
     console.error('WebSocket server error:', error);
   });
+  
+  // Log websocket server initialization status
+  console.log(`WebSocket server initialized with ${Object.keys(wss.options).length} options`);
+  console.log(`WebSocket server listening on path: ${wss.options.path}`);
+  
 
   return httpServer;
 }

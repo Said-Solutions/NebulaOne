@@ -39,32 +39,84 @@ class WebSocketClient {
    * Initialize the WebSocket connection
    */
   public connect(): void {
-    // Only connect if we're not already connected
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      console.log('WebSocket already connected');
-      return;
+    // Only connect if we're not already connected or connecting
+    if (this.socket) {
+      if (this.socket.readyState === WebSocket.OPEN) {
+        console.log('WebSocket already connected');
+        return;
+      }
+      if (this.socket.readyState === WebSocket.CONNECTING) {
+        console.log('WebSocket connection in progress');
+        return;
+      }
     }
 
     this.updateStatus('connecting');
     try {
       // Get the current hostname and appropriate WebSocket protocol
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      this.url = `${protocol}//${window.location.host}/ws`;
+      
+      // Use direct host reference to avoid proxy issues in Replit environment
+      const host = window.location.host;
+      
+      // Explicitly construct the URL
+      this.url = `${protocol}//${host}/ws`;
 
-      console.log(`Connecting to WebSocket at ${this.url}`);
+      console.log(`Connecting to WebSocket at ${this.url}`, 
+        { protocol, host, windowLocation: window.location.toString() });
       
-      // Create the WebSocket connection
-      this.socket = new WebSocket(this.url);
+      // Create the WebSocket connection with explicit options
+      const socket = new WebSocket(this.url);
+      this.socket = socket;
       
-      // Setup event handlers
-      this.socket.onopen = this.handleOpen;
-      this.socket.onclose = this.handleClose;
-      this.socket.onerror = this.handleError;
-      this.socket.onmessage = this.handleMessage;
+      console.log('WebSocket object created', { readyState: this.getReadyStateString() });
+      
+      // Setup event handlers with explicit bindings and enhanced debugging
+      socket.onopen = (event) => {
+        console.log('WebSocket.onopen fired', event);
+        this.handleOpen(event);
+      };
+      
+      socket.onclose = (event) => {
+        console.log('WebSocket.onclose fired', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean
+        });
+        this.handleClose(event);
+      };
+      
+      socket.onerror = (event) => {
+        console.log('WebSocket.onerror fired', event);
+        this.handleError(event);
+      };
+      
+      socket.onmessage = (event) => {
+        console.log('WebSocket.onmessage received', {
+          data: event.data.slice(0, 100) + (event.data.length > 100 ? '...' : '')
+        });
+        this.handleMessage(event);
+      };
     } catch (error) {
       console.error('Failed to establish WebSocket connection', error);
       this.updateStatus('failed');
     }
+  }
+  
+  /**
+   * Get a human-readable string for the current socket readyState
+   */
+  private getReadyStateString(): string {
+    if (!this.socket) return 'null';
+    
+    const states = {
+      [WebSocket.CONNECTING]: 'CONNECTING',
+      [WebSocket.OPEN]: 'OPEN',
+      [WebSocket.CLOSING]: 'CLOSING',
+      [WebSocket.CLOSED]: 'CLOSED'
+    };
+    
+    return states[this.socket.readyState] || `Unknown (${this.socket.readyState})`;
   }
 
   /**
