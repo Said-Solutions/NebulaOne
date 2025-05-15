@@ -359,6 +359,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update subscription status endpoint
+  app.post('/api/update-subscription', async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    
+    const { userId, status, plan, expiryDate } = req.body;
+    
+    if (!userId || !status || !plan || !expiryDate) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Verify the requesting user is either an admin or updating their own subscription
+    const isAdmin = req.user.email === 'saidomar.business@gmail.com';
+    const isOwnSubscription = req.user.id === userId;
+    
+    if (!isAdmin && !isOwnSubscription) {
+      return res.status(403).json({ error: 'Not authorized to update this subscription' });
+    }
+    
+    try {
+      // Update subscription details in database
+      const updatedUser = await storage.updateSubscriptionDetails(userId, {
+        status,
+        plan,
+        expiryDate: new Date(expiryDate)
+      });
+      
+      res.status(200).json({
+        message: 'Subscription updated successfully',
+        user: updatedUser
+      });
+    } catch (error) {
+      console.error('Error updating subscription:', error);
+      res.status(500).json({ 
+        error: 'Failed to update subscription',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Webhook for Stripe events
   app.post('/api/webhook/stripe', async (req, res) => {
     const payload = req.body;
