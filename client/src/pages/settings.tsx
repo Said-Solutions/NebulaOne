@@ -505,7 +505,7 @@ export default function SettingsPage() {
                         <div className="bg-gradient-to-r from-primary to-purple-600 p-0.5 rounded-lg">
                           <Button 
                             onClick={() => navigate("/subscribe")}
-                            className="w-full bg-white hover:bg-transparent hover:text-white dark:bg-gray-900 dark:hover:bg-transparent"
+                            className="w-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700"
                           >
                             <CreditCard className="mr-2 h-4 w-4" />
                             Upgrade to Premium
