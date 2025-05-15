@@ -17,7 +17,10 @@ type AuthContextType = {
   registerMutation: UseMutationResult<User, Error, RegisterData>;
 };
 
-type LoginData = Pick<User, "username" | "password">;
+type LoginData = {
+  username: string;
+  password: string;
+};
 type RegisterData = Omit<User, "id">;
 
 export const AuthContext = createContext<AuthContextType | null>(null);

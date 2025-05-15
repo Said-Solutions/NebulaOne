@@ -5,7 +5,10 @@ export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: Omit<User, "id">): Promise<User>;
+  updateStripeCustomerId(userId: string, customerId: string): Promise<User>;
+  updateUserStripeInfo(userId: string, info: { customerId: string, subscriptionId: string }): Promise<User>;
   
   // Timeline operations
   getTimelineItems(): Promise<TimelineItemType[]>;
@@ -61,11 +64,11 @@ export class MemStorage implements IStorage {
     
     // Add sample users
     const sampleUsers: User[] = [
-      { id: "user1", username: "tiago.kraetzer", name: "Tiago Kraetzer", initials: "TK", avatar: null },
-      { id: "user2", username: "srikanth.gauthareddy", name: "Srikanth Gauthareddy", initials: "SG", avatar: null },
-      { id: "user3", username: "thibault.bridel", name: "Thibault Bridel-Bertomeu", initials: "TB", avatar: null },
-      { id: "user4", username: "anil.bahceevli", name: "Anil Bahceevli", initials: "AB", avatar: null },
-      { id: "user5", username: "ignite.support", name: "IgniteSupportAutomation", initials: "IS", avatar: null },
+      { id: "user1", username: "tiago.kraetzer", email: "tiago.kraetzer@example.com", name: "Tiago Kraetzer", initials: "TK", avatar: null, password: "hashed_password_1", role: "user" },
+      { id: "user2", username: "srikanth.gauthareddy", email: "srikanth.gauthareddy@example.com", name: "Srikanth Gauthareddy", initials: "SG", avatar: null, password: "hashed_password_2", role: "user" },
+      { id: "user3", username: "thibault.bridel", email: "thibault.bridel@example.com", name: "Thibault Bridel-Bertomeu", initials: "TB", avatar: null, password: "hashed_password_3", role: "user" },
+      { id: "user4", username: "anil.bahceevli", email: "anil.bahceevli@example.com", name: "Anil Bahceevli", initials: "AB", avatar: null, password: "hashed_password_4", role: "user" },
+      { id: "user5", username: "ignite.support", email: "ignite.support@example.com", name: "IgniteSupportAutomation", initials: "IS", avatar: null, password: "hashed_password_5", role: "admin" },
     ];
     
     sampleUsers.forEach(user => {
@@ -217,12 +220,52 @@ export class MemStorage implements IStorage {
       (user) => user.username === username,
     );
   }
+  
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.email === email,
+    );
+  }
 
   async createUser(userData: Omit<User, "id">): Promise<User> {
     const id = nanoid();
     const user: User = { ...userData, id };
     this.users.set(id, user);
     return user;
+  }
+  
+  async updateStripeCustomerId(userId: string, customerId: string): Promise<User> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+    
+    const updatedUser: User = {
+      ...user,
+      stripeCustomerId: customerId,
+    };
+    
+    this.users.set(userId, updatedUser);
+    return updatedUser;
+  }
+  
+  async updateUserStripeInfo(userId: string, info: { customerId: string, subscriptionId: string }): Promise<User> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+    
+    const updatedUser: User = {
+      ...user,
+      stripeCustomerId: info.customerId,
+      stripeSubscriptionId: info.subscriptionId,
+      stripeSubscriptionStatus: 'active',
+      subscriptionPlan: 'premium',
+      subscriptionExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+    };
+    
+    this.users.set(userId, updatedUser);
+    return updatedUser;
   }
 
   // Timeline operations

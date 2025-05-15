@@ -109,9 +109,17 @@ export const timeline = pgTable("timeline", {
 export interface User {
   id: string;
   username: string;
+  password?: string; // Optional in responses, required in requests
+  email: string;
   name: string;
   initials: string;
   avatar?: string | null;
+  role?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  stripeSubscriptionStatus?: string;
+  subscriptionPlan?: string;
+  subscriptionExpiry?: Date;
   createdAt?: Date;
 }
 
