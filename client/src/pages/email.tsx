@@ -37,7 +37,9 @@ import {
   AlertCircle as LucideAlertCircle,
   Download as LucideDownload,
   MessageCircle as LucideMessageCircle,
-  Settings as LucideSettings
+  Settings as LucideSettings,
+  Sparkles as LucideSparkles,
+  CheckCircle as LucideCheckCircle
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -99,6 +101,7 @@ interface EmailThread {
   messages: Email[];
   aiSummary?: string;
   summaryConfidence?: number;
+  isCompleted?: boolean;
 }
 
 interface Email {
@@ -156,11 +159,13 @@ function formatEmailDate(date: string | Date): string {
 const EmailThreadItem = ({ 
   thread, 
   isSelected, 
-  onSelect 
+  onSelect,
+  onMarkCompleted 
 }: { 
   thread: EmailThread; 
   isSelected: boolean; 
   onSelect: () => void;
+  onMarkCompleted: () => void;
 }) => {
   // Get the most recent message
   const lastMessage = thread.messages[thread.messages.length - 1];
@@ -222,6 +227,26 @@ const EmailThreadItem = ({
               {thread.isStarred && (
                 <LucideStar className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
               )}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-6 w-6 ${thread.isCompleted ? 'text-green-500' : 'text-neutral-300 hover:text-neutral-500 dark:text-neutral-600 dark:hover:text-neutral-400'}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMarkCompleted();
+                      }}
+                    >
+                      <LucideCheckCircle className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p>{thread.isCompleted ? 'Completed' : 'Mark as completed'}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
           
@@ -990,6 +1015,44 @@ const EmailPage = () => {
             <LucidePlus className="h-4 w-4" />
             <span>Compose</span>
           </Button>
+          
+          <div className="mt-2">
+            <Button 
+              variant="outline"
+              className="w-full justify-start gap-2"
+              onClick={() => setIsAiPanelOpen(!isAiPanelOpen)}
+            >
+              <LucideSparkles className="h-4 w-4" />
+              <span>AI Assistant</span>
+            </Button>
+          </div>
+          
+          {/* Inbox Zero Progress */}
+          <div className="mt-4 bg-neutral-100 dark:bg-neutral-700 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium">Inbox Zero</h4>
+              <span className="text-xs">{completedThreads}/{totalThreads}</span>
+            </div>
+            <div className="h-2 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-green-500" 
+                style={{ width: `${completionPercentage}%` }}
+              ></div>
+            </div>
+            <div className="flex items-center justify-between mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+              <span>{completionPercentage}% complete</span>
+              <div className="flex items-center">
+                <Checkbox 
+                  id="show-completed"
+                  checked={showCompleted} 
+                  onCheckedChange={(checked) => setShowCompleted(!!checked)} 
+                />
+                <label htmlFor="show-completed" className="ml-1.5">
+                  Show completed
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
         
         <ScrollArea className="flex-1">
