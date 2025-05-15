@@ -263,6 +263,10 @@ export default function SettingsPage() {
             <Shield className="h-4 w-4 mr-2" />
             <span className="hidden md:inline">Security</span>
           </TabsTrigger>
+          <TabsTrigger value="subscription" className="flex items-center">
+            <CreditCard className="h-4 w-4 mr-2" />
+            <span className="hidden md:inline">Subscription</span>
+          </TabsTrigger>
         </TabsList>
         
         {/* General Settings Tab */}

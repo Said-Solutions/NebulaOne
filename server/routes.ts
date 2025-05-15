@@ -16,7 +16,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
   
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-    apiVersion: '2023-10-16',
+    apiVersion: '2025-04-30.basil',
   });
   
   // Set up authentication
@@ -236,6 +236,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error adding email:', error);
       res.status(500).json({ error: 'Failed to add email' });
+    }
+  });
+
+  // Stripe payment endpoints
+  app.post('/api/create-payment-intent', async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    try {
+      const { amount, description = 'NebulaOne purchase' } = req.body;
+      
+      if (!amount || typeof amount !== 'number' || amount <= 0) {
+        return res.status(400).json({ error: 'Valid amount is required' });
+      }
+
+      // Create a payment intent
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: 'usd',
+        description,
+        metadata: {
+          userId: req.user.id
+        }
+      });
+
+      res.json({ 
+        clientSecret: paymentIntent.client_secret 
+      });
+    } catch (error) {
+      console.error('Error creating payment intent:', error);
+      res.status(500).json({ 
+        error: 'Failed to create payment intent',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Subscription endpoints
+  app.post('/api/get-or-create-subscription', async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    try {
+      const user = req.user;
+      
+      // Check if user already has a subscription
+      if (user.stripeSubscriptionId) {
+        try {
+          const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+          
+          if (subscription.status === 'active' || subscription.status === 'trialing') {
+            return res.json({
+              subscriptionId: subscription.id,
+              status: subscription.status,
+              currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+              clientSecret: null // No payment needed for existing active subscription
+            });
+          }
+        } catch (error) {
+          console.log('Error fetching subscription, will create new one:', error);
+          // Continue to create new subscription if retrieval fails
+        }
+      }
+
+      // If no subscription exists or it's not active, create a new one
+      // First create or retrieve customer
+      let customerId = user.stripeCustomerId;
+      
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.email,
+          name: user.name,
+          metadata: {
+            userId: user.id
+          }
+        });
+        
+        customerId = customer.id;
+        // Update user with new customer ID
+        await storage.updateStripeCustomerId(user.id, customerId);
+      }
+
+      // Create subscription
+      const subscription = await stripe.subscriptions.create({
+        customer: customerId,
+        items: [{
+          price: process.env.STRIPE_PRICE_ID || 'price_1OwyiTPYhdXReTtMiNSm91Cx', // Default price ID (should be configured in env)
+        }],
+        payment_behavior: 'default_incomplete',
+        expand: ['latest_invoice.payment_intent'],
+        metadata: {
+          userId: user.id
+        }
+      });
+
+      // Get the client secret from the subscription
+      const invoice = subscription.latest_invoice as any;
+      const clientSecret = invoice?.payment_intent?.client_secret;
+
+      // Update user with subscription details
+      await storage.updateUserStripeInfo(user.id, {
+        customerId: customerId,
+        subscriptionId: subscription.id
+      });
+
+      res.json({
+        subscriptionId: subscription.id,
+        status: subscription.status,
+        clientSecret
+      });
+    } catch (error) {
+      console.error('Error creating subscription:', error);
+      res.status(500).json({ 
+        error: 'Failed to create subscription',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Webhook for Stripe events
+  app.post('/api/webhook/stripe', async (req, res) => {
+    const payload = req.body;
+    const sig = req.headers['stripe-signature'] as string;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event;
+
+    try {
+      if (webhookSecret) {
+        event = stripe.webhooks.constructEvent(
+          payload,
+          sig,
+          webhookSecret
+        );
+      } else {
+        // For development without webhook signature verification
+        event = payload;
+        console.warn('Webhook signature verification skipped (webhook secret not set)');
+      }
+
+      // Handle the event
+      switch (event.type) {
+        case 'customer.subscription.created':
+        case 'customer.subscription.updated':
+          const subscription = event.data.object;
+          console.log(`Subscription ${subscription.id} ${event.type}`);
+          
+          // Find user with this subscriptionId and update status
+          // This would involve adding support for updating subscription status in storage
+          break;
+          
+        case 'customer.subscription.deleted':
+          const canceledSubscription = event.data.object;
+          console.log(`Subscription ${canceledSubscription.id} canceled`);
+          
+          // Update user subscription status to canceled
+          break;
+
+        case 'invoice.payment_succeeded':
+          const invoice = event.data.object;
+          console.log(`Invoice ${invoice.id} payment succeeded`);
+          
+          // Update subscription expiry date
+          break;
+
+        case 'payment_intent.succeeded':
+          const paymentIntent = event.data.object;
+          console.log(`Payment ${paymentIntent.id} succeeded`);
+          break;
+
+        default:
+          console.log(`Unhandled event type ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error('Webhook error:', error);
+      res.status(400).send(`Webhook Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   });
 
