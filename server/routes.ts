@@ -291,13 +291,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user already has a subscription
       if (user.stripeSubscriptionId) {
         try {
-          const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+          const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId) as StripeSubscription;
           
           if (subscription.status === 'active' || subscription.status === 'trialing') {
             return res.json({
               subscriptionId: subscription.id,
               status: subscription.status,
-              currentPeriodEnd: new Date((subscription as any).current_period_end * 1000).toISOString(),
+              currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
               clientSecret: null // No payment needed for existing active subscription
             });
           }
@@ -428,6 +428,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
   // Setup WebSocket server for real-time updates on a distinct path to avoid conflict with Vite's HMR
+  // Stripe Webhook endpoint for subscription events
+  app.post('/api/webhook', async (req, res) => {
+    let event;
+    
+    try {
+      // Verify webhook signature if webhook secret is available
+      if (process.env.STRIPE_WEBHOOK_SECRET) {
+        const signature = req.headers['stripe-signature'] as string;
+        event = stripe.webhooks.constructEvent(
+          req.body,
+          signature,
+          process.env.STRIPE_WEBHOOK_SECRET
+        );
+      } else {
+        // If no webhook secret, just parse the event
+        event = req.body;
+      }
+    } catch (err: any) {
+      console.error('Webhook signature verification failed:', err);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+    
+    try {
+      // Handle subscription events
+      if (event.type === 'customer.subscription.updated') {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = subscription.customer as string;
+        
+        // Find user by Stripe customer ID
+        const users = await storage.getUserByStripeCustomerId(customerId);
+        
+        if (users) {
+          // Update user's subscription status
+          await storage.updateUserStripeInfo(users.id, {
+            customerId: customerId,
+            subscriptionId: subscription.id
+          });
+          
+          // Also update subscription status and expiry
+          const subscriptionData = subscription as StripeSubscription;
+          await storage.updateSubscriptionDetails(users.id, {
+            status: subscription.status,
+            plan: 'premium',
+            expiryDate: new Date(subscriptionData.current_period_end * 1000)
+          });
+        }
+      }
+      
+      if (event.type === 'customer.subscription.deleted') {
+        const subscription = event.data.object as Stripe.Subscription;
+        const customerId = subscription.customer as string;
+        
+        // Find user by Stripe customer ID
+        const users = await storage.getUserByStripeCustomerId(customerId);
+        
+        if (users) {
+          // Update user's subscription status to cancelled/expired
+          await storage.updateSubscriptionDetails(users.id, {
+            status: 'canceled',
+            plan: 'free',
+            expiryDate: new Date()
+          });
+        }
+      }
+      
+      res.status(200).json({ received: true });
+    } catch (err: any) {
+      console.error('Error handling webhook event:', err);
+      res.status(500).send(`Webhook Error: ${err.message}`);
+    }
+  });
+
   console.log('Setting up WebSocket server on path: /ws');
   
   const wss = new WebSocketServer({ 

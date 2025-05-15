@@ -9,6 +9,12 @@ export interface IStorage {
   createUser(user: Omit<User, "id">): Promise<User>;
   updateStripeCustomerId(userId: string, customerId: string): Promise<User>;
   updateUserStripeInfo(userId: string, info: { customerId: string, subscriptionId: string }): Promise<User>;
+  getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
+  updateSubscriptionDetails(userId: string, details: { 
+    status: string, 
+    plan: string, 
+    expiryDate: Date 
+  }): Promise<User>;
   
   // Timeline operations
   getTimelineItems(): Promise<TimelineItemType[]>;
@@ -262,6 +268,36 @@ export class MemStorage implements IStorage {
       stripeSubscriptionStatus: 'active',
       subscriptionPlan: 'premium',
       subscriptionExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+    };
+    
+    this.users.set(userId, updatedUser);
+    return updatedUser;
+  }
+  
+  async getUserByStripeCustomerId(customerId: string): Promise<User | undefined> {
+    for (const user of this.users.values()) {
+      if (user.stripeCustomerId === customerId) {
+        return user;
+      }
+    }
+    return undefined;
+  }
+  
+  async updateSubscriptionDetails(userId: string, details: { 
+    status: string, 
+    plan: string, 
+    expiryDate: Date 
+  }): Promise<User> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+    
+    const updatedUser: User = {
+      ...user,
+      stripeSubscriptionStatus: details.status,
+      subscriptionPlan: details.plan,
+      subscriptionExpiry: details.expiryDate
     };
     
     this.users.set(userId, updatedUser);
