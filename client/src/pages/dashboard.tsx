@@ -1,7 +1,14 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { TimelineItemType, TaskType } from "@shared/schema";
+import { 
+  TimelineItemType, 
+  TaskType, 
+  MeetingType, 
+  DocumentType, 
+  EmailType, 
+  ChatThreadType 
+} from "@shared/schema";
 import {
   LucideMessageSquare,
   LucideMail,
@@ -98,7 +105,7 @@ const ActivityItem = ({ item }: { item: TimelineItemType }) => {
     }
   };
 
-  const formatTime = (dateString: string) => {
+  const formatTime = (dateString: Date | string) => {
     try {
       const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
       if (isToday(date)) {
@@ -113,6 +120,35 @@ const ActivityItem = ({ item }: { item: TimelineItemType }) => {
     }
   };
 
+  // Get title from data if available
+  const getTitle = () => {
+    if (item.data) {
+      return 'title' in item.data ? item.data.title : `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} activity`;
+    }
+    return `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} activity`;
+  };
+
+  // Get description based on type
+  const getDescription = () => {
+    if (item.data) {
+      switch (item.type) {
+        case 'meeting':
+          return item.data.summary || 'Meeting scheduled';
+        case 'task':
+          return item.data.description || 'Task updated';
+        case 'chat':
+          return 'New message in chat';
+        case 'document':
+          return `Document updated: ${item.data.title || 'Untitled'}`;
+        case 'email':
+          return item.data.summary || 'Email received';
+        default:
+          return 'Activity recorded';
+      }
+    }
+    return 'Activity recorded';
+  };
+
   return (
     <div className="flex gap-3 mb-4">
       <div className="mt-0.5">
@@ -122,10 +158,10 @@ const ActivityItem = ({ item }: { item: TimelineItemType }) => {
       </div>
       <div className="flex-1">
         <div className="flex justify-between">
-          <h4 className="text-sm font-medium">{item.title || `${item.type.charAt(0).toUpperCase() + item.type.slice(1)} activity`}</h4>
+          <h4 className="text-sm font-medium">{getTitle()}</h4>
           <span className="text-xs text-neutral-500">{formatTime(item.createdAt)}</span>
         </div>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-0.5">{item.description || 'No description available'}</p>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-0.5">{getDescription()}</p>
       </div>
     </div>
   );
@@ -269,9 +305,9 @@ export default function Dashboard() {
   const todoTasks = tasks.filter(t => t.status === 'todo').length;
   const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  // Filter for priority tasks (due soon or marked important)
+  // Filter for priority tasks (non-completed tasks)
   const priorityTasks = tasks
-    .filter(task => task.status !== 'done' && (task.priority === 'high' || task.priority === 'urgent'))
+    .filter(task => task.status !== 'done' && !task.isCompleted)
     .slice(0, 3);
 
   return (
@@ -603,13 +639,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-      </div>
-      
-      {/* Debug link at bottom */}
-      <div className="text-center pt-4 border-t">
-        <Link href="/debug" className="text-sm text-neutral-500 hover:text-primary">
-          Debug Tools
-        </Link>
       </div>
     </div>
   );
