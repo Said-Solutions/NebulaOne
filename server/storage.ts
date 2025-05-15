@@ -58,6 +58,153 @@ export class MemStorage implements IStorage {
     this.documents = new Map();
     this.meetings = new Map();
     this.emails = new Map();
+    
+    // Add sample users
+    const sampleUsers: User[] = [
+      { id: "user1", username: "tiago.kraetzer", name: "Tiago Kraetzer", initials: "TK", avatar: null },
+      { id: "user2", username: "srikanth.gauthareddy", name: "Srikanth Gauthareddy", initials: "SG", avatar: null },
+      { id: "user3", username: "thibault.bridel", name: "Thibault Bridel-Bertomeu", initials: "TB", avatar: null },
+      { id: "user4", username: "anil.bahceevli", name: "Anil Bahceevli", initials: "AB", avatar: null },
+      { id: "user5", username: "ignite.support", name: "IgniteSupportAutomation", initials: "IS", avatar: null },
+    ];
+    
+    sampleUsers.forEach(user => {
+      this.users.set(user.id, user);
+    });
+    
+    // Add sample tasks
+    const sampleTasks: TaskType[] = [
+      {
+        id: "task1",
+        ticketId: "KCONNECTAI-27",
+        title: "Update documentation for Kerio Connect development environment setup",
+        description: "Comprehensive documentation needed for new team members to quickly set up their development environment for Kerio Connect.",
+        status: "inprogress",
+        assigneeId: "user1",
+        assignee: sampleUsers[0],
+        dueDate: "2025-05-20",
+        project: "Kerio Connect AI",
+        isCompleted: false,
+        createdAt: new Date("2025-05-01"),
+        updatedAt: new Date("2025-05-10")
+      },
+      {
+        id: "task2",
+        ticketId: "JIVEBSE-115",
+        title: "Building core plugin",
+        description: "Create a core plugin framework that will serve as the foundation for all future plugin development.",
+        status: "inprogress",
+        assigneeId: "user2",
+        assignee: sampleUsers[1],
+        dueDate: "2025-05-22",
+        project: "Jive BU Support & Engineering",
+        isCompleted: false,
+        createdAt: new Date("2025-05-02"),
+        updatedAt: new Date("2025-05-11")
+      },
+      {
+        id: "task3",
+        ticketId: "KHOROSIMP-5",
+        title: "Community Aurora",
+        description: "Implement Community Aurora feature for Eng/PS Khoros Import project.",
+        status: "todo",
+        assigneeId: "user3",
+        assignee: sampleUsers[2],
+        dueDate: "2025-05-25",
+        project: "Eng/PS Khoros Import",
+        isCompleted: false,
+        createdAt: new Date("2025-05-03"),
+        updatedAt: new Date("2025-05-03")
+      },
+      {
+        id: "task4",
+        ticketId: "ASYNCCOMM-66",
+        title: "Jive Rewrite",
+        description: "Rewrite Jive components to use the new Async Community framework.",
+        status: "todo",
+        assigneeId: "user4",
+        assignee: sampleUsers[3],
+        dueDate: "2025-05-30",
+        project: "Async Community",
+        isCompleted: false,
+        createdAt: new Date("2025-05-04"),
+        updatedAt: new Date("2025-05-04")
+      },
+      {
+        id: "task5",
+        ticketId: "JIVEBSE-122",
+        title: "User Processor Add-On fails to connect to SFTP source following a provider update on April 29, 2025",
+        description: "The User Processor Add-On is failing to connect to SFTP source after the provider made changes to their API.",
+        status: "todo",
+        assigneeId: "user5",
+        assignee: sampleUsers[4],
+        dueDate: "2025-05-18",
+        project: "Jive BU Support & Engineering",
+        isCompleted: false,
+        createdAt: new Date("2025-05-05"),
+        updatedAt: new Date("2025-05-05")
+      },
+      {
+        id: "task6",
+        ticketId: "JIVEBSE-41",
+        title: "Request for API to Initiate Restart Tasks from Jive Admin Console (JCA)",
+        description: "Implement API endpoints to allow admins to restart tasks directly from the Jive Admin Console.",
+        status: "todo",
+        assigneeId: "user1",
+        assignee: sampleUsers[0],
+        dueDate: "2025-06-05",
+        project: "Jive BU Support & Engineering",
+        isCompleted: false,
+        createdAt: new Date("2025-05-06"),
+        updatedAt: new Date("2025-05-06")
+      },
+      {
+        id: "task7",
+        ticketId: "KCONNECTAI-20",
+        title: "Implement Compliance Pre-Send Hook in Kerio Connect Server",
+        description: "Add pre-send hooks for email compliance checking in Kerio Connect Server.",
+        status: "todo",
+        assigneeId: "user2",
+        assignee: sampleUsers[1],
+        dueDate: "2025-06-10",
+        project: "Kerio Connect AI",
+        isCompleted: false,
+        createdAt: new Date("2025-05-07"),
+        updatedAt: new Date("2025-05-07")
+      },
+      {
+        id: "task8",
+        ticketId: "KCONNECTAI-22",
+        title: "Local Compliance Rule Generator (RegEx via Local LLM)",
+        description: "Create a local compliance rule generator that uses RegEx patterns and a local LLM for improved accuracy.",
+        status: "todo",
+        assigneeId: "user3",
+        assignee: sampleUsers[2],
+        dueDate: "2025-06-15",
+        project: "Kerio Connect AI",
+        isCompleted: false,
+        createdAt: new Date("2025-05-08"),
+        updatedAt: new Date("2025-05-08")
+      },
+      {
+        id: "task9",
+        ticketId: "KCONNECTAI-21",
+        title: "Implement Compliance Rules Storage & Settings UI",
+        description: "Design and implement UI for storing and configuring compliance rules in Kerio Connect AI.",
+        status: "done",
+        assigneeId: "user4",
+        assignee: sampleUsers[3],
+        dueDate: "2025-05-10",
+        project: "Kerio Connect AI",
+        isCompleted: true,
+        createdAt: new Date("2025-04-20"),
+        updatedAt: new Date("2025-05-09")
+      }
+    ];
+    
+    sampleTasks.forEach(task => {
+      this.tasks.set(task.id, task);
+    });
   }
 
   // User operations

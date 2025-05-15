@@ -38,12 +38,7 @@ const EmailPage = lazy(() => import('./pages/email'));
 
 const MeetingsPage = lazy(() => import('./pages/meetings'));
 
-const TasksPage = lazy(() => Promise.resolve({
-  default: () => <PlaceholderModule 
-    title="Tasks Module" 
-    description="Task and project management (Jira alternative)" 
-  />
-}));
+const TasksPage = lazy(() => import('./pages/tasks'));
 
 const DocumentsPage = lazy(() => Promise.resolve({
   default: () => <PlaceholderModule 
