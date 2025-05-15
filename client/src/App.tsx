@@ -48,12 +48,7 @@ const TimelinePage = lazy(() => import('./pages/timeline'));
 
 const AIAssistantPage = lazy(() => import('./pages/ai'));
 
-const SettingsPage = lazy(() => Promise.resolve({
-  default: () => <PlaceholderModule 
-    title="Settings" 
-    description="Customize your NebulaOne workspace" 
-  />
-}));
+const SettingsPage = lazy(() => import('./pages/settings'));
 
 function Router() {
   // Routes that should use the main layout
