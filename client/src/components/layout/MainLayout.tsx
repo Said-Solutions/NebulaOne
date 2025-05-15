@@ -88,20 +88,22 @@ export default function MainLayout({ children }: MainLayoutProps) {
             
             <nav className="mt-4 px-2 space-y-1">
               {navItems.map((item) => (
-                <Link key={item.path} href={item.path}>
-                  <a
-                    className={cn(
-                      "flex items-center px-3 py-2 rounded-md text-sm font-medium",
-                      location === item.path 
-                        ? "bg-primary/10 text-primary" 
-                        : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
-                    )}
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    {item.icon}
-                    <span className="ml-3">{item.name}</span>
-                  </a>
-                </Link>
+                <div
+                  key={item.path}
+                  className={cn(
+                    "flex items-center px-3 py-2 rounded-md text-sm font-medium cursor-pointer",
+                    location === item.path 
+                      ? "bg-primary/10 text-primary" 
+                      : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                  )}
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    window.location.href = item.path;
+                  }}
+                >
+                  {item.icon}
+                  <span className="ml-3">{item.name}</span>
+                </div>
               ))}
             </nav>
             
@@ -110,12 +112,13 @@ export default function MainLayout({ children }: MainLayoutProps) {
               <Button 
                 variant="outline" 
                 className="w-full justify-start"
-                asChild
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  window.location.href = "/settings";
+                }}
               >
-                <Link href="/settings">
-                  <LucideSettings className="mr-2 h-4 w-4" />
-                  Settings
-                </Link>
+                <LucideSettings className="mr-2 h-4 w-4" />
+                Settings
               </Button>
             </div>
           </div>
@@ -133,19 +136,19 @@ export default function MainLayout({ children }: MainLayoutProps) {
               </div>
               <nav className="mt-8 flex-1 px-4 space-y-1">
                 {navItems.map((item) => (
-                  <Link key={item.path} href={item.path}>
-                    <a
-                      className={cn(
-                        "group flex items-center px-3 py-2 rounded-md text-sm font-medium",
-                        location === item.path 
-                          ? "bg-primary/10 text-primary" 
-                          : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
-                      )}
-                    >
-                      {item.icon}
-                      <span className="ml-3">{item.name}</span>
-                    </a>
-                  </Link>
+                  <div
+                    key={item.path}
+                    className={cn(
+                      "group flex items-center px-3 py-2 rounded-md text-sm font-medium cursor-pointer",
+                      location === item.path 
+                        ? "bg-primary/10 text-primary" 
+                        : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                    )}
+                    onClick={() => window.location.href = item.path}
+                  >
+                    {item.icon}
+                    <span className="ml-3">{item.name}</span>
+                  </div>
                 ))}
               </nav>
             </div>
@@ -161,11 +164,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
                     variant="ghost" 
                     size="sm" 
                     className="text-xs text-neutral-500 h-auto p-0"
-                    asChild
+                    onClick={() => window.location.href = "/settings"}
                   >
-                    <Link href="/settings">
-                      Settings
-                    </Link>
+                    Settings
                   </Button>
                 </div>
               </div>
