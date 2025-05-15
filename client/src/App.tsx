@@ -44,12 +44,7 @@ const DocumentsPage = lazy(() => import('./pages/documents'));
 
 const DocumentDetailPage = lazy(() => import('./pages/document-detail'));
 
-const TimelinePage = lazy(() => Promise.resolve({
-  default: () => <PlaceholderModule 
-    title="Timeline Module" 
-    description="Activity feed and time-based overview of all workspace events" 
-  />
-}));
+const TimelinePage = lazy(() => import('./pages/timeline'));
 
 const AIAssistantPage = lazy(() => Promise.resolve({
   default: () => <PlaceholderModule 
