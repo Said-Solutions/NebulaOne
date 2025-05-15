@@ -11,6 +11,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Eye, EyeOff, Lock, Mail, User, ArrowRight, Check, Loader2 } from "lucide-react";
 
 // Login schema
@@ -21,6 +22,7 @@ const loginSchema = z.object({
   password: z.string().min(6, {
     message: "Password must be at least 6 characters",
   }),
+  rememberMe: z.boolean().default(false),
 });
 
 // Registration schema
@@ -66,6 +68,7 @@ const AuthPage = () => {
     defaultValues: {
       username: "",
       password: "",
+      rememberMe: false,
     },
   });
 
@@ -84,7 +87,11 @@ const AuthPage = () => {
   // Handle login submission
   const onLoginSubmit = (values: LoginValues) => {
     loginMutation.mutate(
-      { username: values.username, password: values.password },
+      { 
+        username: values.username, 
+        password: values.password,
+        rememberMe: values.rememberMe 
+      },
       {
         onSuccess: () => {
           toast({
@@ -203,6 +210,28 @@ const AuthPage = () => {
                             </div>
                           </FormControl>
                           <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={loginForm.control}
+                      name="rememberMe"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 py-1">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                          <div className="space-y-1 leading-none">
+                            <FormLabel className="cursor-pointer">
+                              Remember me
+                            </FormLabel>
+                            <FormDescription>
+                              Keep me signed in on this device
+                            </FormDescription>
+                          </div>
                         </FormItem>
                       )}
                     />
