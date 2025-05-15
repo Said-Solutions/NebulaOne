@@ -6,9 +6,17 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  email: text("email").notNull().unique(),
   name: text("name").notNull(),
   initials: text("initials").notNull(),
   avatar: text("avatar"),
+  role: text("role").default("user").notNull(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeSubscriptionStatus: text("stripe_subscription_status"),
+  subscriptionPlan: text("subscription_plan").default("free").notNull(),
+  subscriptionExpiry: timestamp("subscription_expiry"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
